@@ -1,0 +1,9 @@
+{
+  "name": "rms-dsh-mcp",
+  "private": true,
+  "type": "module",
+  "description": "rms_dsh 聚合 MCP server：把本项目全部插件的工具按插件名分派暴露为 MCP 工具",
+  "dependencies": {
+    "@modelcontextprotocol/server": "2.2.0"
+  }
+}

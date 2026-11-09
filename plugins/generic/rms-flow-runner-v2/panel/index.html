@@ -1,0 +1,3423 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Flow Runner V2 · Matrix</title>
+<style>
+  :root { --bg:#0f1115; --panel:#171a21; --line:#2a2f3a; --text:#e6e8ee; --muted:#9aa3b2; --accent:#4c8dff; --chat:#1d2430; --agent:#161a20; --ok:#39b26b; --bad:#e05555; }
+  * { box-sizing:border-box; }
+  body { margin:0; font:13px/1.5 "Segoe UI","Microsoft YaHei",sans-serif; background:var(--bg); color:var(--text); }
+  header { padding:10px 16px; border-bottom:1px solid var(--line); display:flex; gap:12px; align-items:center; }
+  header h1 { font-size:14px; margin:0; font-weight:600; white-space:nowrap; }
+  .new-matrix { width:100%; margin-bottom:10px; }
+  .composer { width:100%; resize:vertical; min-height:78px; line-height:1.55; }
+  #draftText { min-height:190px; }
+  .composer:focus { outline:none; border-color:var(--accent); }
+  input, textarea, button { font:inherit; color:inherit; background:var(--panel); border:1px solid var(--line); border-radius:6px; padding:6px 8px; }
+  button { cursor:pointer; }
+  button.primary { background:var(--accent); border-color:var(--accent); color:#fff; }
+  button:disabled { opacity:.45; cursor:not-allowed; }
+  main { display:grid; grid-template-columns:280px 1fr 440px; height:calc(100vh - 49px); }
+  .col { overflow:auto; padding:12px; }
+  .col + .col { border-left:1px solid var(--line); }
+  .card { background:var(--panel); border:1px solid var(--line); border-radius:8px; padding:10px; margin-bottom:10px; }
+  .card h2 { font-size:12px; color:var(--muted); margin:0 0 8px; font-weight:600; letter-spacing:.5px; }
+  .tree-node { padding:4px 6px; border-radius:5px; cursor:pointer; display:flex; gap:6px; align-items:center; }
+  .tree-node:hover { background:#20242e; }
+  .tree-node.active { background:#26324a; }
+  .badge { font-size:11px; padding:1px 6px; border-radius:10px; border:1px solid var(--line); color:var(--muted); white-space:nowrap; }
+  .badge.runnable, .badge.completed { color:var(--ok); border-color:var(--ok); }
+  .badge.accepted { color:#7bb0ff; border-color:#7bb0ff; }
+  .badge.failed, .badge.cancelled { color:var(--bad); border-color:var(--bad); }
+  .badge.building, .badge.clarifying, .badge.waiting_human { color:#e0b455; border-color:#e0b455; }
+  .row { display:flex; gap:8px; flex-wrap:wrap; margin-bottom:8px; }
+  .session-tabs { display:flex; gap:6px; margin:6px 0 8px; }
+  .session-tabs button { font-size:11px; padding:3px 10px; background:transparent; color:var(--muted); border:1px solid var(--line); border-radius:999px; }
+  .session-tabs button.active { color:var(--text); border-color:var(--accent); background:rgba(103,140,255,.12); }
+  .msg { border-radius:8px; padding:8px 10px; margin-bottom:8px; white-space:pre-wrap; word-break:break-word; }
+  .msg.chat { background:var(--chat); border-left:3px solid var(--accent); }
+  .msg.agent { background:var(--agent); border-left:3px solid var(--line); color:var(--muted); font-size:12px; }
+  .msg .meta { font-size:11px; color:var(--muted); margin-bottom:4px; }
+  /* 非对话内容（工具/事件/动作）默认折叠，按需展开 */
+  .msg.folded { padding:0; }
+  .msg.folded summary { cursor:pointer; padding:7px 10px; list-style:none; }
+  .msg.folded summary::-webkit-details-marker { display:none; }
+  .msg.folded summary .meta { display:block; margin-bottom:2px; }
+  .msg.folded summary::before { content:'▸'; color:var(--muted); margin-right:4px; }
+  .msg.folded[open] summary::before { content:'▾'; }
+  .msg.folded .fold-preview { display:block; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:var(--muted); font-size:11.5px; }
+  .msg.folded .fold-body { padding:0 10px 8px; }
+  .msg.folded .fold-body pre { margin:0; white-space:pre-wrap; word-break:break-word; font:11px/1.5 "Cascadia Code", Consolas, monospace; }
+  .modal { position:fixed; inset:0; z-index:30; background:rgba(0,0,0,.55); display:flex; justify-content:center; align-items:flex-start; }
+  .modal-box { width:min(920px,92vw); max-height:82vh; overflow:auto; margin-top:7vh; padding:14px; background:var(--panel); border:1px solid var(--line); border-radius:10px; }
+  .node-modal-box { width:min(860px,92vw); }
+  .node-hero { display:flex; flex-wrap:wrap; gap:6px; margin:6px 0 10px; }
+  .node-chip { font-size:10.5px; padding:2px 8px; border:1px solid var(--line); border-radius:999px; color:var(--muted); }
+  .node-chip b { color:var(--text); font-weight:650; }
+  .node-grid { display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-bottom:8px; }
+  .node-section { border:1px solid var(--line); border-radius:8px; padding:8px; background:#151a22; }
+  .node-section h3 { margin:0 0 6px; font-size:11px; color:var(--muted); font-weight:650; }
+  .node-fields { display:flex; flex-wrap:wrap; gap:4px; }
+  .node-field { font-size:10.5px; padding:1px 6px; border:1px solid var(--line); border-radius:4px; color:var(--text); }
+  .node-intent { font-size:12px; line-height:1.55; white-space:pre-wrap; margin:8px 0; color:var(--text); }
+  .node-config pre, #nodeModalJson { margin:0; max-height:320px; overflow:auto; background:#11141a; border:1px solid var(--line); border-radius:8px; padding:8px; font:11px/1.5 "Cascadia Code", Consolas, monospace; white-space:pre-wrap; word-break:break-word; }
+  .node-code-box { margin-top:8px; }
+  .node-code-box summary { cursor:pointer; font-size:11px; color:var(--muted); margin-bottom:6px; }
+  .ticket-item { border:1px solid var(--line); border-radius:8px; padding:10px; margin-top:8px; }
+  .ticket-item + .ticket-item { margin-top:10px; }
+  .artifact-list { display:flex; flex-direction:column; gap:2px; margin:6px 0 10px; }
+  .artifact-file { cursor:pointer; padding:3px 6px; border-radius:5px; font-size:12px; color:var(--text); }
+  .artifact-file:hover { background:#20242e; }
+  .status-chip { display:inline-flex; align-items:center; gap:7px; margin-top:6px; font-size:12px; color:#e0b455; }
+  .status-chip .dot { width:8px; height:8px; border-radius:50%; background:#e0b455; animation:pulse 1.1s infinite; flex:none; }
+  @keyframes pulse { 0% { opacity:.25; transform:scale(.8); } 50% { opacity:1; transform:scale(1); } 100% { opacity:.25; transform:scale(.8); } }
+  .typing { display:flex; align-items:center; gap:5px; padding:6px 2px; color:var(--muted); font-size:12px; }
+  .typing span { width:6px; height:6px; border-radius:50%; background:var(--muted); animation:blink 1.2s infinite; }
+  .typing span:nth-child(2) { animation-delay:.2s; }
+  .typing span:nth-child(3) { animation-delay:.4s; }
+  .typing i { font-style:normal; margin-left:4px; }
+  @keyframes blink { 0%,80%,100% { opacity:.2; } 40% { opacity:1; } }
+  pre { margin:0; overflow:auto; background:#11141a; border:1px solid var(--line); border-radius:6px; padding:8px; font-size:12px; max-height:280px; }
+  .empty { color:var(--muted); }
+  .hint { color:var(--muted); font-size:12px; margin-bottom:6px; }
+  #skeleton .node { margin-left:12px; }
+  .node-line { display:flex; gap:6px; align-items:center; }
+  .dag-wrap { position:relative; border:1px solid var(--line); border-radius:10px; background:#11141a; overflow:auto; }
+  .dag { position:relative; margin:0 auto; }
+  .dag svg { position:absolute; inset:0; pointer-events:none; }
+  .dag-node { position:absolute; width:148px; padding:7px 8px; border:1px solid var(--line); border-radius:8px; background:var(--panel); cursor:pointer; }
+  .dag-node.error { border-color:#e35d6a; box-shadow:0 0 0 1px rgba(227,93,106,.28); }
+  .dag-node .dag-io { color:var(--muted); font-size:8.5px; margin-top:2px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .dag-node .dag-miss { color:#e35d6a; font-size:9px; margin-top:2px; }
+  .contract-warn { color:#f0a35e; font-size:11px; line-height:1.45; margin:0 0 6px; white-space:pre-wrap; }
+  .contract-ok { color:#67c98e; font-size:11px; margin:0 0 6px; }
+  .dag-node:hover { border-color:var(--accent); background:#1d2430; }
+  .dag-node.group { border-color:#7bb0ff; border-style:dashed; }
+  /* 分发/合并只是传值控制块：菱形表示，不当作执行节点 */
+  .dag-node.diamond {
+    width:148px; min-height:96px; padding:24px 10px;
+    border:0; border-radius:0; background:transparent;
+    display:flex; flex-direction:column; align-items:center; justify-content:center;
+    text-align:center; box-shadow:none; z-index:1;
+  }
+  .dag-node.diamond::before,
+  .dag-node.diamond::after {
+    content:''; position:absolute; z-index:-1;
+    clip-path:polygon(50% 0, 100% 50%, 50% 100%, 0 50%);
+  }
+  .dag-node.diamond::before { inset:-5px -24px; background:var(--line); }
+  .dag-node.diamond::after { inset:-4px -23px; background:var(--panel); }
+  .dag-node.diamond:hover::after { background:#1d2430; }
+  .dag-node.diamond.error::before { background:#e35d6a; }
+  .dag-node.diamond.error { box-shadow:none; }
+  .dag-node.diamond .dag-label { white-space:normal; line-height:1.2; }
+  .dag-node.diamond .dag-kind { justify-content:center; }
+  .dag-node.diamond .dag-io,
+  .dag-node.diamond .dag-miss { display:none; }
+  .dag-legend { display:flex; gap:14px; align-items:center; color:var(--muted); font-size:10.5px; margin:0 0 6px; }
+  .dag-legend .lg-rect { width:12px; height:9px; border:1px solid var(--line); border-radius:2px; background:var(--panel); }
+  .dag-legend .lg-diamond { width:10px; height:10px; border:1px solid var(--line); background:var(--panel); transform:rotate(45deg); }
+  .dag-node .dag-label { font-size:11.5px; font-weight:650; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .dag-node .dag-kind { color:var(--muted); font-size:9.5px; margin-top:2px; display:flex; align-items:center; gap:4px; overflow:hidden; white-space:nowrap; }
+  .rewind-mini { float:right; border:1px solid var(--line); background:transparent; color:var(--muted); font-size:10px; line-height:16px; padding:0 6px; border-radius:5px; cursor:pointer; }
+  .rewind-mini:hover:not(:disabled) { color:var(--accent); border-color:var(--accent); }
+  .rewind-mini:disabled { opacity:.4; cursor:not-allowed; }
+  .dag-runtime { color:#7bb0ff; font:600 9.5px "Cascadia Code", Consolas, monospace; flex:none; }
+  .kv { display:grid; grid-template-columns:110px 1fr; gap:4px; font-size:12px; }
+  .kv .k { color:var(--muted); }
+  body.project-mode main { grid-template-columns:280px 1fr; }
+  body.project-mode #detailCol { display:none; }
+  .project-tabs { display:flex; gap:6px; margin:10px 0; flex-wrap:wrap; }
+  .project-tabs button { font-size:11px; padding:3px 10px; background:transparent; color:var(--muted); border:1px solid var(--line); border-radius:999px; }
+  .project-tabs button.active { color:var(--text); border-color:var(--accent); background:rgba(103,140,255,.12); }
+  .project-item { padding:8px; border:1px solid var(--line); border-radius:8px; margin-bottom:8px; cursor:default; }
+  .project-item:hover { border-color:var(--accent); }
+  .project-item.active { border-color:var(--accent); background:#26324a; }
+  .project-item .row { margin:4px 0 0; }
+  .root-card { border:1px solid var(--line); border-radius:8px; padding:10px; margin-bottom:8px; }
+  .root-card .row { margin:6px 0 0; }
+  .mem-item { border:1px solid var(--line); border-radius:8px; padding:8px; margin-bottom:8px; white-space:pre-wrap; }
+  .mem-item .meta { display:flex; justify-content:space-between; align-items:center; gap:8px; color:var(--muted); font-size:11px; margin-bottom:4px; }
+  #projectModal .modal-box { width:min(560px,92vw); }
+</style>
+</head>
+<body>
+<header>
+  <h1>Flow Runner V2 · Matrix</h1>
+  <button id="refreshBtn">刷新</button>
+</header>
+<main>
+  <section class="col">
+    <div class="card">
+      <button class="primary new-matrix" id="newProjectBtn">＋ 新建项目</button>
+      <h2>项目</h2>
+      <div id="projects" class="empty">加载中…</div>
+    </div>
+    <div class="card">
+      <button class="primary new-matrix" id="newMatrixBtn">＋ 新建根 matrix</button>
+      <h2>根 MATRIX</h2>
+      <div id="tree" class="empty">加载中…</div>
+    </div>
+  </section>
+  <section class="col">
+  <div id="projectView" style="display:none"></div>
+  <div id="domainView" style="display:none"></div>
+  <div id="matrixView">
+    <div class="card" id="headerCard">
+      <h2>当前 MATRIX</h2>
+      <div id="headerInfo" class="empty">未选择</div>
+      <div id="agentStatus"></div>
+    </div>
+    <div class="card" id="draftCard" style="display:none">
+      <h2>新建 MATRIX</h2>
+      <div class="hint">第一条消息会创建 matrix 并启动需求分析；信息足够时由绑定 agent 自动生成骨架 DAG，之后可继续对话推进。</div>
+      <textarea id="draftText" class="composer" placeholder="把需求写清楚：目标、输入输出、验收标准…&#10;Enter 创建，Shift+Enter 换行"></textarea>
+      <div class="row" style="margin-top:8px">
+        <button class="primary" id="createBtn">创建并开始</button>
+        <button id="cancelDraftBtn">取消</button>
+        <span class="hint" id="draftStatus"></span>
+      </div>
+    </div>
+    <div class="card" id="ticketCard" style="display:none">
+      <h2>待处理工单</h2>
+      <div id="ticketList"></div>
+    </div>
+    <div class="card" id="chatCard">
+      <div class="row" style="justify-content:space-between;align-items:center">
+        <h2 style="margin:0">会话流（chat / agent）</h2>
+        <button id="rewindBtn">撤回…</button>
+      </div>
+      <div class="session-tabs" id="sessionTabs">
+        <button data-session-tab="all" class="active">全部</button>
+        <button data-session-tab="chat">对话</button>
+        <button data-session-tab="dsh">dsh 轨迹</button>
+      </div>
+      <div id="messages"></div>
+      <div id="typing" class="typing" style="display:none"><span></span><span></span><span></span><i>agent 执行中…</i></div>
+      <div id="questionCard" style="display:none;margin:8px 0;padding:8px;border:1px solid var(--line);border-radius:8px">
+        <h2 style="margin:0 0 6px">待回答问题</h2>
+        <div id="questionList"></div>
+      </div>
+      <div class="hint" id="routingHint"></div>
+      <textarea id="inputText" class="composer" placeholder="发给绑定的 dsh agent：由 agent 识别意图并调用 matrix_* 工具；Enter 发送，Shift+Enter 换行"></textarea>
+      <div class="row" style="margin-top:8px"><button class="primary" id="sendBtn">提交输入</button></div>
+    </div>
+  </div>
+  </section>
+  <section class="col" id="detailCol">
+    <div class="card">
+      <h2>门禁与操作</h2>
+      <div id="stateInfo" class="kv"></div>
+      <div class="row" id="actions" style="margin-top:8px"></div>
+      <div class="row" style="margin-top:4px;align-items:center">
+        <span class="hint" style="margin:0">运行 I/O</span>
+        <select id="runMode">
+          <option value="files">files · 文件式产物</option>
+          <option value="inline">inline · stdin/stdout</option>
+        </select>
+        <button id="applyRunModeBtn">应用</button>
+      </div>
+      <div class="hint" id="errorInfo"></div>
+    </div>
+    <div class="card">
+      <h2>骨架 DAG / 定义</h2>
+      <div id="skeleton" class="empty"></div>
+      <details style="margin-top:8px"><summary class="hint">查看 DAG JSON（只读）</summary><pre id="dagJson"></pre></details>
+      <details style="margin-top:8px"><summary class="hint">查看可执行 definition JSON</summary><pre id="definition"></pre></details>
+    </div>
+    <div class="card">
+      <h2>子矩阵</h2>
+      <div id="children" class="empty"></div>
+    </div>
+    <div class="card">
+      <h2>运行记录</h2>
+      <div id="runs" class="empty"></div>
+    </div>
+    <div class="card">
+      <h2>信箱</h2>
+      <div id="mails" class="empty"></div>
+    </div>
+  </section>
+</main>
+<div id="rewindModal" class="modal" style="display:none">
+  <div class="modal-box">
+    <div class="row" style="justify-content:space-between;align-items:center;margin-bottom:6px">
+      <strong>撤回对话</strong>
+      <button id="rewindClose">关闭</button>
+    </div>
+    <div class="hint">选择一个已完成的对话轮次；将从该轮分叉出新会话继续，原会话保留在 dsh 侧栏。matrix 的门禁状态与运行记录不变。</div>
+    <div id="rewindList" style="margin-top:8px"></div>
+  </div>
+</div>
+<div id="runModal" class="modal" style="display:none">
+  <div class="modal-box">
+    <div class="row" style="justify-content:space-between;align-items:center;margin-bottom:6px">
+      <strong id="runModalTitle">运行</strong>
+      <button id="runModalClose">关闭</button>
+    </div>
+    <div id="runModalSummary" class="hint"></div>
+    <div id="runModalBody"></div>
+  </div>
+</div>
+<div id="nodeModal" class="modal" style="display:none">
+  <div class="modal-box node-modal-box">
+    <div class="row" style="justify-content:space-between;align-items:center;margin-bottom:6px">
+      <strong id="nodeModalTitle">节点定义</strong>
+      <button id="nodeModalClose">关闭</button>
+    </div>
+    <div id="nodeModalMeta" class="node-hero"></div>
+    <div id="nodeModalFriendly"></div>
+    <div id="nodeModalRaw" style="display:none"><pre id="nodeModalJson"></pre></div>
+    <div class="row" style="margin-top:10px">
+      <button id="nodeModalRawBtn">查看原始 JSON</button>
+      <button id="nodeModalCopy">复制 JSON</button>
+    </div>
+  </div>
+</div>
+<div id="moveModal" class="modal" style="display:none">
+  <div class="modal-box" style="width:min(520px,92vw)">
+    <div class="row" style="justify-content:space-between;align-items:center;margin-bottom:6px">
+      <strong>移动根 matrix</strong>
+      <button id="moveModalClose">关闭</button>
+    </div>
+    <div class="hint" id="moveMatrixInfo"></div>
+    <div class="row" style="margin-top:10px">
+      <span class="hint" style="margin:0">目标项目</span>
+      <select id="moveTargetProject" style="flex:1"></select>
+    </div>
+    <div class="row" style="margin-top:10px">
+      <button class="primary" id="moveConfirmBtn">移动</button>
+      <span class="hint" id="moveStatus"></span>
+    </div>
+  </div>
+</div>
+<div id="domainModal" class="modal" style="display:none">
+  <div class="modal-box" style="width:min(620px,92vw)">
+    <div class="row" style="justify-content:space-between;align-items:center;margin-bottom:6px">
+      <strong id="domainModalTitle">新建领域</strong>
+      <button id="domainModalClose">关闭</button>
+    </div>
+    <div class="hint">领域是限界上下文：挂在项目下，有独立 LLM 会话与记忆，包含 Models / Stubs / Interacts。</div>
+    <div class="row" style="margin-top:10px"><input id="domainName" placeholder="领域名称" style="flex:1" /></div>
+    <textarea id="domainBrief" class="composer" placeholder="领域目标 / 范围（可选）"></textarea>
+    <textarea id="domainUbiquitous" class="composer" placeholder="通用语言，一行一个（可选）"></textarea>
+    <div class="row" style="margin-top:8px">
+      <button class="primary" id="domainSaveBtn">创建领域</button>
+      <span class="hint" id="domainSaveStatus"></span>
+    </div>
+  </div>
+</div>
+<div id="elementModal" class="modal" style="display:none">
+  <div class="modal-box" style="width:min(760px,94vw)">
+    <div class="row" style="justify-content:space-between;align-items:center;margin-bottom:6px">
+      <strong id="elementModalTitle">编辑元素</strong>
+      <button id="elementModalClose">关闭</button>
+    </div>
+    <div class="row"><input id="elementName" placeholder="名称" style="flex:1" /><select id="elementKind"></select></div>
+    <textarea id="elementDescription" class="composer" placeholder="职责 / 描述"></textarea>
+    <div id="elementExtra"></div>
+    <div class="row" style="margin-top:8px">
+      <button class="primary" id="elementSaveBtn">保存</button>
+      <span class="hint" id="elementSaveStatus"></span>
+    </div>
+  </div>
+</div>
+<div id="projectModal" class="modal" style="display:none">
+  <div class="modal-box">
+    <div class="row" style="justify-content:space-between;align-items:center;margin-bottom:6px">
+      <strong id="projectModalTitle">新建项目</strong>
+      <button id="projectModalClose">关闭</button>
+    </div>
+    <div class="hint">项目是顶层容器：可以有多个根 matrix，并有自己的 dsh 会话、工作区与记忆。</div>
+    <div class="row" style="margin-top:10px"><input id="projectName" placeholder="项目名称" style="flex:1" /></div>
+    <textarea id="projectBrief" class="composer" placeholder="项目目标 / 范围说明（可选）"></textarea>
+    <div class="row" style="margin-top:8px">
+      <button class="primary" id="projectCreateBtn">创建项目</button>
+      <span class="hint" id="projectCreateStatus"></span>
+    </div>
+  </div>
+</div>
+<script>
+const api = (path, options) => fetch(path, options).then(async r => {
+  const body = await r.json().catch(() => ({}))
+  if (!r.ok) throw new Error(body.error || r.statusText)
+  return body
+})
+const post = (path, body) => api(path, {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify(body || {}),
+})
+const esc = value => String(value ?? '').replace(/[&<>"]/g, ch => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;' }[ch]))
+const badge = state => `<span class="badge ${esc(state)}">${esc(state)}</span>`
+
+let treeData = []
+let currentId = null
+let currentDetail = null
+// 新建草稿态：还没有 matrix，主输入框用来写需求；发送第一条消息后才创建
+let draftMode = false
+// 轮询渲染不能打断用户选择/输入：记录已渲染位置与待应用快照
+let renderedMatrixId = null
+let renderedSeq = 0
+// 会话流分 tab：全部 / 对话 / dsh 轨迹（工具调用、系统事件等）
+let sessionTab = 'all'
+let pendingDetail = null
+let treeSignature = ''
+let currentRewindPoints = []
+let rewindCacheKey = ''
+let currentAgentRunning = false
+// 项目视图：项目列表 → 项目视图（概览/根 MATRIX/项目会话/项目记忆/运行汇总）→ matrix 详情
+let projectsData = []
+let currentProjectId = null
+let currentProject = null
+let viewMode = 'matrix'
+let projectTab = 'overview'
+let projectSessionTab = 'all'
+let draftProjectId = null
+let projectPending = null
+let renderedProjectSignature = ''
+let pendingMoveMatrixId = null
+let editingProjectId = null
+// 领域视图
+let currentDomainId = null
+let currentDomain = null
+let domainTab = 'overview'
+let domainSessionTab = 'all'
+let domainPending = null
+let renderedDomainSignature = ''
+let editingDomainId = null
+let editingElement = null
+// 任何鼠标/键盘/剪贴板操作后，15 秒内不触发轮询重绘，避免打断选择与粘贴
+let interactionGraceUntil = 0
+const markInteraction = () => { interactionGraceUntil = Date.now() + 15000 }
+;['mousedown', 'mouseup', 'keydown', 'keyup', 'copy', 'cut', 'paste', 'focusin'].forEach(name => {
+  document.addEventListener(name, markInteraction, true)
+})
+
+function findInTree(nodes, id) {
+  for (const node of nodes || []) {
+    if (node.id === id) return node
+    const found = findInTree(node.children, id)
+    if (found) return found
+  }
+  return null
+}
+
+function renderTree(nodes, depth = 0) {
+  return (nodes || []).map(node => `
+    <div>
+      <div class="tree-node ${node.id === currentId ? 'active' : ''}" data-id="${esc(node.id)}" style="margin-left:${depth * 12}px">
+        <span>${esc(node.name)}</span>${badge(node.state)}
+        ${node.children_total ? `<span class="hint">${node.children_accepted}/${node.children_total}</span>` : ''}
+      </div>
+      ${renderTree(node.children, depth + 1)}
+    </div>`).join('')
+}
+
+async function loadTree() {
+  const el = document.getElementById('tree')
+  if (!currentProjectId) {
+    treeData = []
+    treeSignature = ''
+    el.className = 'empty'
+    el.innerHTML = '先选择或新建项目'
+    return
+  }
+  const data = await api(`api/matrix/tree?project_id=${encodeURIComponent(currentProjectId)}`)
+  treeData = data.roots || []
+  const nextSignature = `${currentProjectId}:${JSON.stringify(treeData)}`
+  if (nextSignature === treeSignature) return
+  treeSignature = nextSignature
+  el.className = treeData.length ? '' : 'empty'
+  el.innerHTML = treeData.length ? renderTree(treeData) : '该项目还没有根 matrix，点「新建根 matrix」开始。'
+  el.querySelectorAll('[data-id]').forEach(item => item.onclick = () => select(item.dataset.id))
+}
+
+function fmtContract(value) {
+  if (value === null || value === undefined) return '（未声明）'
+  const text = typeof value === 'string' ? value : JSON.stringify(value)
+  return esc(text.length > 90 ? `${text.slice(0, 90)}…` : text)
+}
+
+function nodeRuntime(node) {
+  if (!node || !node.type) return ''
+  if (node.type === 'script') return node.runtime || 'script'
+  if (node.type === 'http') {
+    const method = String(node.method || 'GET').toUpperCase()
+    return method === 'GET' ? 'http' : `http.${method.toLowerCase()}`
+  }
+  if (node.type === 'tool') return node.tool ? `tool · ${node.tool}` : 'tool'
+  if (node.type === 'llm') return node.mode === 'choose' ? 'LLM 选择' : 'LLM 生成'
+  if (node.type === 'agent') return 'Agent 会话'
+  if (node.type === 'human') return '人工输入'
+  if (node.type === 'subflow') return '子流程 · matrix'
+  if (node.type === 'fanout') return `并行分发 · ${node.collect || 'keyed'}`
+  if (node.type === 'merge') return '汇合 · mapping'
+  return node.type
+}
+
+/** 与旧版一致的 DAG 图布局：sequence 逐行、branch/loop 等按父子关系生成边。 */
+function buildGraph(entry, options = {}) {
+  const nodes = []
+  const edges = []
+  const index = new Map()
+  const keyOf = node => {
+    const key = String(node.id)
+    if (!index.has(key)) {
+      index.set(key, {
+        key,
+        id: node.id,
+        label: node.label || node.id,
+        kind: node.type,
+        runtime: nodeRuntime(node),
+        shape: node.type === 'fanout' || node.type === 'merge' ? 'diamond' : 'rect',
+        depth: 0,
+        order: nodes.length,
+        readonly: Boolean(node.readonly),
+      })
+      nodes.push(index.get(key))
+    }
+    return index.get(key)
+  }
+  /** fanout 直连 merge 的边只表示 carry 透传；有 carry 时改走右侧弧线，避免被分支节点盖住。 */
+  function decorateFanoutMerge(prevNode, step, prevKey) {
+    if (!prevNode || prevNode.type !== 'fanout' || !step || step.type !== 'merge') return
+    const target = keyOf(step)
+    const direct = edges.find(edge => edge.from === prevKey.key && edge.to === target.key)
+    if (!direct) return
+    direct.skipContract = true
+    const carry = Array.isArray(prevNode.carry) ? prevNode.carry : []
+    if (!carry.length) {
+      direct.hidden = true
+      return
+    }
+    direct.label = `透传 ${carry.join(', ')}`
+    direct.route = 'side'
+    direct.dashed = true
+    direct.carry = true
+  }
+
+  function visit(node, depth, parent, edgeLabel, dashed, skipContract) {
+    // 最外层 sequence 只是容器：跳过它，让入口/出口节点与真实步骤连成一条数据流
+    if (options.skipRoot && node === entry && Array.isArray(node.steps)) {
+      let maxDepth = depth
+      let prev = parent
+      let prevNode = null
+      let cursor = depth
+      for (const step of node.steps) {
+        const child = visit(step, cursor, prev)
+        if (prevNode && prevNode.type === 'fanout' && step.type === 'merge') {
+          decorateFanoutMerge(prevNode, step, prev)
+          const target = keyOf(step)
+          for (const branch of prevNode.branches || []) {
+            const branchNode = keyOf(branch)
+            edges.push({ from: branchNode.key, to: target.key, label: String(branch.id), skipContract: true })
+          }
+        }
+        prev = keyOf(step)
+        prevNode = step
+        cursor = Math.max(cursor, child + 1)
+        maxDepth = Math.max(maxDepth, child)
+      }
+      return maxDepth
+    }
+    const current = keyOf(node)
+    current.depth = Math.max(current.depth, depth)
+    if (parent) {
+      edges.push({
+        from: parent.key,
+        to: current.key,
+        label: edgeLabel,
+        dashed: Boolean(dashed),
+        skipContract: Boolean(skipContract),
+      })
+    }
+    let maxDepth = depth
+    if (node.type === 'sequence') {
+      let cursor = depth + 1
+      let prevKey = current
+      let prevNode = node
+      for (const step of node.steps || []) {
+        const child = visit(step, cursor, prevKey)
+        // fanout → merge：carry 边单独走侧边，分支边按 branch id 连到 merge
+        if (prevNode && prevNode.type === 'fanout' && step.type === 'merge') {
+          decorateFanoutMerge(prevNode, step, prevKey)
+          const target = keyOf(step)
+          for (const branch of prevNode.branches || []) {
+            const branchNode = keyOf(branch)
+            edges.push({ from: branchNode.key, to: target.key, label: String(branch.id), skipContract: true })
+          }
+        }
+        prevKey = keyOf(step)
+        prevNode = step
+        cursor = Math.max(cursor, child + 1)
+        maxDepth = Math.max(maxDepth, child)
+      }
+    } else if (node.type === 'fanout') {
+      for (const branch of node.branches || []) {
+        maxDepth = Math.max(maxDepth, visit(branch, depth + 1, current, '同输入', false, true))
+      }
+    } else if (node.type === 'branch') {
+      // then/else 消费的是 branch 的输入，不是 branch 的 Cout；字段级校验由 skeleton 契约负责
+      maxDepth = Math.max(maxDepth, visit(node.then, depth + 1, current, '是', false, true))
+      if (node.else) maxDepth = Math.max(maxDepth, visit(node.else, depth + 1, current, '否', true, true))
+    } else if (node.type === 'fold') {
+      maxDepth = Math.max(maxDepth, visit(node.body, depth + 1, current, '每项'))
+    } else if (node.type === 'loop') {
+      const child = visit(node.body, depth + 1, current, '循环体')
+      edges.push({ from: keyOf(node.body).key, to: current.key, label: '回环', dashed: true })
+      maxDepth = Math.max(maxDepth, child)
+    } else if (node.type === 'or_else') {
+      maxDepth = Math.max(maxDepth, visit(node.primary, depth + 1, current, '主路径'))
+      maxDepth = Math.max(maxDepth, visit(node.fallback, depth + 1, current, '失败兜底', true))
+    }
+    return maxDepth
+  }
+  const maxDepth = visit(entry, 0, null)
+  return { nodes, edges, maxDepth }
+}
+
+/** 契约对象的字段名；字符串/数组描述无法逐字段对齐，返回空数组。 */
+function contractFields(value) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return []
+  return Object.keys(value)
+}
+
+const contractLabel = fields => (fields && fields.length ? fields.join(', ') : '—')
+
+function renderDag(dag, children) {
+  if (!dag || !dag.entry) return ''
+  const childByNode = {}
+  for (const child of children || []) childByNode[child.node_id] = child
+  const detailById = {}
+  for (const node of dag.nodes || []) detailById[node.id] = node
+
+  const entrySpec = dag.entry
+  const isSequence = entrySpec.type === 'sequence' && Array.isArray(entrySpec.steps)
+  const steps = isSequence ? entrySpec.steps : [entrySpec]
+  const last = steps[steps.length - 1] || null
+  const lastDetail = last ? detailById[last.id] : null
+  const rootInputs = dag.root_inputs !== undefined ? dag.root_inputs : entrySpec.inputs
+  const rootOutputs = dag.root_outputs !== undefined
+    ? dag.root_outputs
+    : (lastDetail ? lastDetail.outputs : entrySpec.outputs)
+
+  if (isSequence) {
+    detailById.__entry__ = { id: '__entry__', inputs: null, outputs: rootInputs, virtual: 'entry', build_status: 'completed' }
+    detailById.__exit__ = { id: '__exit__', inputs: null, outputs: rootOutputs, virtual: 'exit', build_status: 'completed' }
+  }
+
+  // 用入口/出口包住真实步骤；skipRoot 让最外层 sequence 容器不占节点
+  const flow = isSequence
+    ? {
+      id: '__flow__',
+      type: 'sequence',
+      steps: [
+        { id: '__entry__', type: 'entry', label: '入口' },
+        ...steps,
+        { id: '__exit__', type: 'exit', label: '出口' },
+      ],
+    }
+    : entrySpec
+  const graph = buildGraph(flow, { skipRoot: isSequence })
+
+  // 控制边同时标注数据传递：目标 Cin 缺失的字段直接标红
+  for (const edge of graph.edges) {
+    if (edge.skipContract || edge.hidden) continue
+    const target = detailById[edge.to]
+    const source = detailById[edge.from]
+    if (!target || !source) continue
+    const need = contractFields(target.inputs)
+    if (!need.length) continue
+    if (typeof source.outputs === 'string' || Array.isArray(source.outputs)) continue
+    const have = contractFields(source.outputs)
+    const missing = need.filter(key => !have.includes(key))
+    if (missing.length) {
+      edge.label = `缺 ${missing.join(', ')}`
+      edge.error = true
+    } else {
+      edge.label = need.join(', ')
+    }
+  }
+
+  const byDepth = new Map()
+  for (const node of graph.nodes) {
+    if (!byDepth.has(node.depth)) byDepth.set(node.depth, [])
+    byDepth.get(node.depth).push(node)
+  }
+  const nodeW = 148
+  const colW = 184
+  const rowH = 136
+  const padX = 16
+  const padY = 14
+  const maxCount = Math.max(1, ...[...byDepth.values()].map(list => list.length))
+  // 透传 carry 边沿右侧绕行，需要额外留白，避免线和标签贴在画布边缘
+  const sidePad = graph.edges.some(edge => edge.route === 'side' && !edge.hidden) ? 46 : 0
+  const width = padX * 2 + maxCount * colW + sidePad * 2
+  const height = padY * 2 + (graph.maxDepth + 1) * rowH
+  const positions = new Map()
+  for (const [depth, list] of byDepth) {
+    list.sort((a, b) => a.order - b.order)
+    list.forEach((node, index) => {
+      const offset = (maxCount - list.length) * colW / 2
+      const diamond = node.shape === 'diamond'
+      positions.set(node.key, {
+        x: padX + sidePad + offset + index * colW + (colW - nodeW) / 2,
+        y: padY + depth * rowH,
+        width: nodeW,
+        // 菱形上下顶点比节点框各外扩 5px
+        height: diamond ? 101 : 76,
+        top: diamond ? -5 : 0,
+      })
+    })
+  }
+  const defs = '<defs><marker id="dag-arrow" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L8,4 L0,8 z" fill="#9aa3b2"/></marker><marker id="dag-arrow-carry" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L8,4 L0,8 z" fill="#7bb0ff"/></marker></defs>'
+  const paths = graph.edges.filter(edge => !edge.hidden).map(edge => {
+    const from = positions.get(edge.from)
+    const to = positions.get(edge.to)
+    if (!from || !to) return ''
+    const color = edge.error ? '#e35d6a' : (edge.carry ? '#7bb0ff' : '#9aa3b2')
+    const dash = edge.dashed ? ' stroke-dasharray="4 3"' : ''
+    if (edge.route === 'side') {
+      const fx = from.x + from.width + 24
+      const fy = from.y + 48
+      const tx = to.x + to.width + 24
+      const ty = to.y + 48
+      const rx = Math.max(fx, tx) + 26
+      const d = `M${fx},${fy} C${rx},${fy} ${rx},${ty} ${tx},${ty}`
+      // 标签放在弧线上半段，避开下一层的分支节点，避免被节点背景盖住
+      const label = edge.label
+        ? `<text x="${rx - 6}" y="${fy + 22}" font-size="9" fill="${color}" text-anchor="end">${esc(edge.label)}</text>`
+        : ''
+      return `<path d="${d}" fill="none" stroke="${color}" stroke-opacity=".85" stroke-width="1.2"${dash} marker-end="url(#dag-arrow-carry)"/>${label}`
+    }
+    const x1 = from.x + from.width / 2
+    const y1 = from.y + from.height
+    const x2 = to.x + to.width / 2
+    const y2 = to.y + to.top
+    const mid = Math.max(24, Math.abs(y2 - y1) / 2)
+    const d = `M${x1},${y1} C${x1},${y1 + mid} ${x2},${y2 - mid} ${x2},${y2}`
+    const label = edge.label
+      ? `<text x="${(x1 + x2) / 2 + 5}" y="${(y1 + y2) / 2}" font-size="9" fill="${color}">${esc(edge.label)}</text>`
+      : ''
+    return `<path d="${d}" fill="none" stroke="${color}" stroke-opacity="${edge.error ? '.9' : '.55'}" stroke-width="1.2"${dash} marker-end="url(#dag-arrow)"/>${label}`
+  }).join('')
+  const boxes = graph.nodes.map(node => {
+    const position = positions.get(node.key)
+    const detail = detailById[node.id]
+    const child = childByNode[node.id]
+    const virtual = detail && detail.virtual
+    const group = node.kind === 'subflow'
+    const diamond = node.shape === 'diamond'
+    const buildStatus = detail && detail.build_status
+    const status = virtual
+      ? (virtual === 'entry' ? '输入契约' : '输出契约')
+      : diamond
+        ? '传值 · 不执行'
+        : node.kind === 'branch'
+          ? '条件分支 · 是/否'
+          : group
+          ? (child ? `子矩阵 · ${child.state}` : '待创建子矩阵')
+          : buildStatus === 'completed'
+            ? (node.kind === 'script' ? '已编码' : '已预构建')
+            : buildStatus === 'failed'
+              ? '编码失败'
+              : buildStatus === 'building' ? '编码中' : '待编码'
+    const cin = contractFields(detail && detail.inputs)
+    const cout = contractFields(detail && detail.outputs)
+    const missing = (detail && detail.contract_missing) || []
+    const carry = detail && Array.isArray(detail.carry) && detail.carry.length
+      ? ` · carry ${detail.carry.join(', ')}`
+      : ''
+    const hint = detail
+      ? `${diamond ? '控制节点（传值，不执行） · ' : ''}${detail.id}${carry} · Cin ${JSON.stringify(detail.inputs)} · Cout ${JSON.stringify(detail.outputs)}${missing.length ? ` · 缺 ${missing.join(', ')}` : ''}`
+      : node.id
+    return `<div class="dag-node${group ? ' group' : ''}${diamond ? ' diamond' : ''}${missing.length ? ' error' : ''}" style="left:${position.x}px;top:${position.y}px" data-node="${esc(node.id)}" title="${esc(hint)}">
+      <div class="dag-label">${esc(node.label)}</div>
+      <div class="dag-kind"><span class="dag-runtime">${esc(virtual ? (virtual === 'entry' ? 'input' : 'output') : node.runtime)}</span> · ${esc(status)}</div>
+      <div class="dag-io">Cin ${esc(contractLabel(cin))}</div>
+      <div class="dag-io">Cout ${esc(contractLabel(cout))}</div>
+      ${missing.length ? `<div class="dag-miss">缺 ${esc(missing.join(', '))}</div>` : ''}
+    </div>`
+  }).join('')
+  const legend = '<div class="dag-legend"><span class="lg-rect"></span>执行节点<span class="lg-diamond"></span>分发/合并 · 传值（不执行）</div>'
+  const contract = dag.contract_errors && dag.contract_errors.length
+    ? `<div class="contract-warn">⚠ Cin/Cout 不一致：${dag.contract_errors.map(esc).join('；')}</div>`
+    : (dag.contract_ok ? '<div class="contract-ok">✓ Cin/Cout 已对齐</div>' : '')
+  return `${contract}${legend}<div class="dag-wrap"><div class="dag" style="width:${width}px;height:${height}px">
+    <svg width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">${defs}${paths}</svg>${boxes}
+  </div></div>`
+}
+
+/** 执行状态：绑定 agent 是否在跑、在等模型还是在调工具；预构建时显示当前节点。 */
+function renderAgentStatus(detail) {
+  const el = document.getElementById('agentStatus')
+  const typing = document.getElementById('typing')
+  if (!el) return
+  const agent = detail.agent || null
+  let label = ''
+  if (agent && agent.running) {
+    label = agent.phase === 'question'
+      ? '等待用户回答问题'
+      : agent.phase === 'tool'
+        ? `agent 执行中 · 正在执行工具${agent.tool ? ` · ${agent.tool}` : ''}`
+        : 'agent 执行中 · 等待模型响应'
+  } else if (detail.state === 'building') {
+    const node = detail.progress && detail.progress.current_node
+    label = node ? `预构建中 · ${node.label || node.node_id}` : '预构建中…'
+  }
+  el.className = label ? 'status-chip' : ''
+  el.innerHTML = label ? `<span class="dot"></span>${esc(label)}` : ''
+  if (typing) {
+    typing.style.display = label ? 'flex' : 'none'
+    const text = typing.querySelector('i')
+    if (text) text.textContent = label || 'agent 执行中…'
+  }
+}
+
+function renderDetail(detail) {
+  if (draftMode) return
+  const isNewMatrix = renderedMatrixId !== detail.id
+  currentId = detail.id
+  currentDetail = detail
+  currentAgentRunning = Boolean(detail.agent && detail.agent.running)
+  const header = document.getElementById('headerInfo')
+  header.className = ''
+  header.innerHTML = `
+    <div style="display:flex;gap:8px;align-items:center;margin-bottom:6px"><strong>${esc(detail.name)}</strong>${badge(detail.state)}</div>
+    <div class="hint">${esc(detail.breadcrumb.map(item => item.name).join(' → '))}</div>
+    <div class="row">${detail.project ? '<button id="backToProject">← 返回项目</button>' : ''}${detail.parent_id ? '' : (detail.archived_at
+      ? '<button id="restoreMatrixBtn">恢复归档</button>'
+      : '<button id="archiveMatrixBtn">归档 matrix</button><button id="moveMatrixBtn">移动到项目…</button>')}<button id="navNext">下一个未验收</button><button id="navParent" ${detail.nav.parent ? '' : 'disabled'}>返回父级</button>
+      ${detail.dsh_session_id ? '<button id="locateSessionFlow">dsh 轨迹 ↓</button>' : ''}
+    </div>
+    <div class="hint">${esc(detail.task)}</div>`
+
+  const backBtn = document.getElementById('backToProject')
+  if (backBtn) backBtn.onclick = () => openProject(detail.project.id)
+  const archiveBtn = document.getElementById('archiveMatrixBtn')
+  if (archiveBtn) archiveBtn.onclick = () => setMatrixArchived(detail.id, true)
+  const restoreBtn = document.getElementById('restoreMatrixBtn')
+  if (restoreBtn) restoreBtn.onclick = () => setMatrixArchived(detail.id, false)
+  const moveBtn = document.getElementById('moveMatrixBtn')
+  if (moveBtn) moveBtn.onclick = () => openMoveModal(detail.id)
+
+  const next = detail.nav.next
+  document.getElementById('navNext').onclick = () => next ? select(next.id) : alert('当前子树已全部验收')
+  document.getElementById('navParent').onclick = () => detail.nav.parent && select(detail.nav.parent)
+  const locateFlowBtn = document.getElementById('locateSessionFlow')
+  if (locateFlowBtn) locateFlowBtn.onclick = () => locateSessionFlow()
+
+  const stateInfo = document.getElementById('stateInfo')
+  stateInfo.innerHTML = [
+    ['matrix_id', detail.id],
+    ['stored_state', detail.stored_state],
+    ['depth', detail.depth],
+    ['prebuild_done', String(detail.prebuild_done)],
+    ['execution_mode', detail.execution_mode || 'files'],
+    ['dsh_session', detail.dsh_session_id || '（未创建）'],
+    ['cwd', detail.cwd || ''],
+    ['updated_at', detail.updated_at],
+  ].map(([k, v]) => `<div class="k">${esc(k)}</div><div>${esc(v)}</div>`).join('')
+  document.getElementById('errorInfo').textContent = detail.error ? `错误：${detail.error.path || ''} ${detail.error.message || ''}` : ''
+
+  const actions = document.getElementById('actions')
+  const labels = {
+    'generate-dag': '生成 DAG', 'confirm-dag': '确认 DAG', prebuild: '预构建', 'reopen-dag': '回到 DAG 确认', retry: '重试',
+    accept: '验收通过', run: '运行', evaluate: '评估', cancel: '终止', supervise: '监督分析',
+  }
+  actions.innerHTML = (detail.actions || []).filter(name => labels[name])
+    .map(name => `<button data-action="${name}">${labels[name]}</button>`).join('')
+  actions.querySelectorAll('[data-action]').forEach(button => button.onclick = () => doAction(button.dataset.action))
+
+  const runMode = document.getElementById('runMode')
+  runMode.value = detail.execution_mode || 'files'
+  document.getElementById('applyRunModeBtn').onclick = async () => {
+    try {
+      await post(`api/matrix/${detail.id}/run-mode`, { execution_mode: runMode.value })
+      await refresh()
+    } catch (error) {
+      document.getElementById('routingHint').textContent = `切换运行模式失败：${error.message}`
+    }
+  }
+
+  document.getElementById('skeleton').className = detail.dag ? '' : 'empty'
+  document.getElementById('skeleton').innerHTML = detail.dag ? renderDag(detail.dag, detail.children) : '尚未生成骨架 DAG'
+  document.querySelectorAll('#skeleton .dag-node').forEach(item => {
+    const nodeId = item.dataset.node
+    const node = (detail.dag?.nodes || []).find(entry => entry.id === nodeId)
+      || (nodeId === '__entry__'
+        ? { id: '__entry__', label: '入口', inputs: null, outputs: detail.dag?.root_inputs ?? null, virtual: true }
+        : nodeId === '__exit__'
+          ? { id: '__exit__', label: '出口', inputs: null, outputs: detail.dag?.root_outputs ?? null, virtual: true }
+          : null)
+    item.onclick = () => {
+      if (node && node.group && node.matrix_id) return select(node.matrix_id)
+      openNodeModal(node || { id: nodeId, label: nodeId }, detail)
+    }
+  })
+  document.getElementById('dagJson').textContent = detail.dag ? JSON.stringify(detail.dag, null, 2) : '（尚未生成）'
+  document.getElementById('definition').textContent = detail.definition ? JSON.stringify(detail.definition, null, 2) : '（预构建完成后生成可执行 definition）'
+
+  const children = document.getElementById('children')
+  children.className = detail.children.length ? '' : 'empty'
+  children.innerHTML = detail.children.length ? detail.children.map(child => `
+    <div class="tree-node" data-child="${esc(child.matrix_id)}">${esc(child.name)}${badge(child.state)}<span class="hint">${esc(child.node_path)}</span></div>`).join('') : '无子矩阵'
+  children.querySelectorAll('[data-child]').forEach(item => item.onclick = () => select(item.dataset.child))
+
+  const runs = document.getElementById('runs')
+  runs.className = detail.runs.length ? '' : 'empty'
+  runs.innerHTML = detail.runs.length ? detail.runs.map(run => `
+    <div class="tree-node" data-run="${esc(run.id)}">${esc(run.id)}${badge(run.status)}<span class="hint">${run.trace_count} 步 · ${esc(run.completed_at || run.created_at)}</span></div>`).join('') : '暂无运行'
+  runs.querySelectorAll('[data-run]').forEach(item => item.onclick = () => showRun(item.dataset.run))
+
+  const mails = document.getElementById('mails')
+  const list = detail.mailbox.mails || []
+  mails.className = list.length ? '' : 'empty'
+  mails.innerHTML = list.length ? list.slice(-8).map(mail => `
+    <div class="msg agent"><div class="meta">${esc(mail.from_name)} → ${esc(mail.kind)}${mail.unread ? ' · 未读' : ''}</div>${esc(mail.subject || '')} ${esc(mail.body.slice(0, 200))}</div>`).join('') : '暂无信件'
+
+  renderQuestions(detail.questions || [], detail.id)
+  renderTickets(detail.tickets || [], detail.id)
+  renderMessages(detail)
+  renderAgentStatus(detail)
+  renderedMatrixId = detail.id
+  document.getElementById('routingHint').textContent = detail.routing.hint
+  renderTreeInto()
+}
+
+/** 定位到当前 matrix 的会话流时间线。 */
+function locateSessionFlow() {
+  const card = document.getElementById('chatCard')
+  if (card) card.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  const input = document.getElementById('inputText')
+  if (input) window.setTimeout(() => input.focus(), 350)
+}
+
+let nodeModalRawVisible = false
+let nodeModalCurrentJson = '{}'
+
+/** 节点原始定义：有实现时优先展示 IR，否则展示只读 DAG 里的节点信息。 */
+function nodeRawJsonOf(node) {
+  if (node && node.implementation) return node.implementation
+  const copy = { ...(node || {}) }
+  delete copy.code
+  delete copy.readonly
+  delete copy.contract_missing
+  delete copy.implementation
+  return copy
+}
+
+function nodeConfigOf(node) {
+  const keys = ['type', 'runtime', 'mode', 'output', 'prompt', 'system', 'tool', 'method', 'url',
+    'condition', 'mapping', 'collect', 'carry', 'matrix_id', 'matrix_path', 'args', 'timeout_ms',
+    'model_id', 'stub_id', 'operation', 'key', 'where', 'request_model_ids', 'response_model_ids']
+  const config = {}
+  for (const key of keys) if (node[key] !== undefined) config[key] = node[key]
+  if (node.branches) config.branches = node.branches.map(branch => branch.id)
+  if (node.then) config.then = node.then.id
+  if (node.else) config.else = node.else.id
+  return config
+}
+
+function nodeFieldsHtml(value) {
+  if (value === null || value === undefined) return '<span class="hint">未声明</span>'
+  if (typeof value === 'string') return `<span class="node-field">${esc(value)}</span>`
+  if (Array.isArray(value)) {
+    return value.length ? value.map(item => `<span class="node-field">${esc(item)}</span>`).join('') : '<span class="hint">空</span>'
+  }
+  const fields = Object.keys(value)
+  return fields.length ? fields.map(key => `<span class="node-field">${esc(key)}</span>`).join('') : '<span class="hint">空</span>'
+}
+
+function nodeStatusOf(node, detail) {
+  if (node.virtual) return node.virtual === 'entry' ? '输入契约' : '输出契约'
+  if (node.type === 'fanout' || node.type === 'merge') return '传值 · 不执行'
+  if (node.type === 'persist') return '持久化 · 运行时直接执行'
+  if (node.type === 'stub') return '领域能力 · 调用 stub matrix'
+  if (node.type === 'branch') return '条件分支'
+  if (node.group) {
+    const child = (detail.children || []).find(item => item.matrix_id === node.matrix_id)
+    return child ? `子矩阵 · ${child.state}` : '待创建子矩阵'
+  }
+  return node.build_status || 'planned'
+}
+
+/** 节点详情弹窗：友好视图 + 原始 JSON 切换。 */
+function openNodeModal(node, detail) {
+  nodeModalRawVisible = false
+  const raw = nodeRawJsonOf(node)
+  nodeModalCurrentJson = JSON.stringify(raw, null, 2)
+  document.getElementById('nodeModalTitle').textContent = `${node.label || node.id} · ${node.id}`
+  const meta = [
+    ['类型', node.type || 'unknown'],
+    ['状态', nodeStatusOf(node, detail)],
+    ['路径', node.path || '—'],
+    node.runtime ? ['运行时', node.runtime] : null,
+    node.group && node.matrix_id ? ['子矩阵', node.matrix_id] : null,
+  ].filter(Boolean)
+    .map(([key, value]) => `<span class="node-chip"><b>${esc(key)}</b> ${esc(value)}</span>`)
+    .join('')
+  document.getElementById('nodeModalMeta').innerHTML = meta
+
+  const config = nodeConfigOf(node)
+  const configHtml = Object.keys(config).length
+    ? `<div class="node-config"><h3 style="font-size:11px;color:var(--muted);margin:0 0 6px">节点配置</h3><pre>${esc(JSON.stringify(config, null, 2))}</pre></div>`
+    : ''
+  const code = node.implementation && typeof node.implementation.code === 'string'
+    ? node.implementation.code
+    : (typeof node.code === 'string' ? node.code : null)
+
+  document.getElementById('nodeModalFriendly').innerHTML = `
+    ${node.intent ? `<div class="node-intent">${esc(node.intent)}</div>` : ''}
+    <div class="node-grid">
+      <div class="node-section"><h3>Cin</h3><div class="node-fields">${nodeFieldsHtml(node.inputs)}</div></div>
+      <div class="node-section"><h3>Cout</h3><div class="node-fields">${nodeFieldsHtml(node.outputs)}</div></div>
+    </div>
+    ${configHtml}
+    ${code ? `<details class="node-code-box" open><summary>实现代码</summary><pre>${esc(code)}</pre></details>` : ''}`
+  document.getElementById('nodeModalFriendly').style.display = ''
+  document.getElementById('nodeModalRaw').style.display = 'none'
+  document.getElementById('nodeModalJson').textContent = nodeModalCurrentJson
+  document.getElementById('nodeModalRawBtn').textContent = '查看原始 JSON'
+  document.getElementById('nodeModal').style.display = 'flex'
+}
+
+function closeNodeModal() {
+  document.getElementById('nodeModal').style.display = 'none'
+}
+
+function toggleNodeRaw() {
+  nodeModalRawVisible = !nodeModalRawVisible
+  document.getElementById('nodeModalFriendly').style.display = nodeModalRawVisible ? 'none' : ''
+  document.getElementById('nodeModalRaw').style.display = nodeModalRawVisible ? '' : 'none'
+  document.getElementById('nodeModalRawBtn').textContent = nodeModalRawVisible ? '返回友好视图' : '查看原始 JSON'
+}
+
+async function copyNodeJson() {
+  const button = document.getElementById('nodeModalCopy')
+  try {
+    await navigator.clipboard.writeText(nodeModalCurrentJson)
+    const previous = button.textContent
+    button.textContent = '已复制'
+    window.setTimeout(() => { button.textContent = previous }, 1200)
+  } catch {
+    window.prompt('复制失败，请手动复制', nodeModalCurrentJson)
+  }
+}
+
+/**
+ * 归档条目渲染：message/event 走聊天气泡，tool/action 用事件样式，统一按 archive 增量追加。
+ */
+function archiveHtml(entry) {
+  const role = entry.data && entry.data.role
+  const style = entry.type === 'message' ? `chat ${role === 'user' ? 'user' : 'assistant'}` : 'agent'
+  const label = entry.type === 'message' ? `${entry.type}/${role || ''}` : entry.type
+  const messageTime = entry.data && entry.data.session_time
+    ? new Date(entry.data.session_time).toISOString()
+    : entry.at
+  const rewindSeq = (entry.type === 'message' || entry.type === 'tool') ? rewindSeqBefore(messageTime) : null
+  const rewind = rewindSeq !== null
+    ? `<button class="rewind-mini" data-rewind-seq="${esc(rewindSeq)}" ${currentAgentRunning ? 'disabled' : ''} title="撤回这条消息及之后的内容">撤回</button>`
+    : ''
+  const metaText = `#${entry.seq} · ${label}${entry.source ? ` · ${entry.source}` : ''} · ${esc(entry.at)}`
+  if (entry.type === 'message') {
+    return `<div class="msg ${style}"><div class="meta">${metaText}${rewind}</div>${esc(entry.text || '')}</div>`
+  }
+  // 非对话内容默认折叠，避免工具调用和系统事件淹没聊天记录
+  const text = String(entry.text || '')
+  const firstLine = (text.split('\n').find(line => line.trim()) || '').trim()
+  const preview = firstLine.length > 120 ? `${firstLine.slice(0, 120)}…` : firstLine
+  return `<details class="msg ${style} folded">
+    <summary><span class="meta">${metaText}</span><span class="fold-preview">${esc(preview || '（无内容）')}</span></summary>
+    <div class="fold-body">${rewind}<pre>${esc(text)}</pre></div>
+  </details>`
+}
+
+/**
+ * 会话流增量渲染：只追加新消息，绝不整块替换。
+ * 这样正在选择/复制的文本不会被轮询清掉，也不会强行把滚动条拽到底部。
+ */
+function matchesSessionTab(entry) {
+  if (sessionTab === 'chat') return entry.type === 'message'
+  if (sessionTab === 'dsh') return entry.type !== 'message' || entry.source === 'dsh'
+  return true
+}
+
+function renderMessages(detail, reset = false) {
+  const box = document.getElementById('messages')
+  if (reset || renderedMatrixId !== detail.id) {
+    box.innerHTML = ''
+    renderedSeq = 0
+  }
+  // 会话流直接渲染 archive：对话、系统事件、工具调用和按钮动作都在同一条时间线里
+  const archive = detail.archive && detail.archive.length ? detail.archive : (detail.messages || [])
+  const list = archive.filter(matchesSessionTab)
+  if (!list.length) {
+    if (!box.querySelector('.empty')) box.innerHTML = '<div class="empty">当前 tab 还没有内容</div>'
+    return
+  }
+  const placeholder = box.querySelector('.empty')
+  if (placeholder) placeholder.remove()
+  const lastSeq = list[list.length - 1].seq
+  if (lastSeq <= renderedSeq) return
+  const atBottom = box.scrollTop + box.clientHeight >= box.scrollHeight - 12
+  box.insertAdjacentHTML('beforeend', list.filter(entry => entry.seq > renderedSeq).map(entry => archiveHtml(entry)).join(''))
+  renderedSeq = lastSeq
+  if (atBottom) box.scrollTop = box.scrollHeight
+}
+
+/** 用户正在输入、选中文本，或刚进行过鼠标/键盘/剪贴板操作时，暂停轮询渲染。 */
+function shouldDeferRender() {
+  if (Date.now() < interactionGraceUntil) return true
+  const active = document.activeElement
+  if (active && ['inputText', 'projectInputText', 'memoryText', 'draftText', 'domainInput', 'domainMemoryText', 'domainName', 'domainBrief', 'domainUbiquitous', 'elementName', 'elementDescription', 'elementAttributes', 'elementInvariants', 'elementRelations', 'elementOperations', 'elementActors', 'elementPre', 'elementPost', 'elementMain', 'elementAlt'].includes(active.id)) return true
+  const selection = window.getSelection()
+  return Boolean(selection && !selection.isCollapsed && selection.toString().trim())
+}
+
+function flushPendingDetail() {
+  if (shouldDeferRender()) return
+  if (domainPending) {
+    const detail = domainPending
+    domainPending = null
+    renderDomain(detail)
+  }
+  if (projectPending) {
+    const detail = projectPending
+    projectPending = null
+    renderProject(detail)
+  }
+  if (!pendingDetail) return
+  const detail = pendingDetail
+  pendingDetail = null
+  renderDetail(detail)
+}
+
+document.addEventListener('selectionchange', flushPendingDetail)
+document.addEventListener('mouseup', () => setTimeout(flushPendingDetail, 0))
+document.addEventListener('focusout', () => setTimeout(flushPendingDetail, 0))
+
+function renderTreeInto() {
+  const el = document.getElementById('tree')
+  if (!treeData.length) return
+  if (JSON.stringify(treeData) === treeSignature && el.innerHTML.trim()) return
+  el.innerHTML = renderTree(treeData)
+  el.querySelectorAll('[data-id]').forEach(item => item.onclick = () => select(item.dataset.id))
+}
+
+function setDraftMode(on) {
+  draftMode = on
+  document.getElementById('draftCard').style.display = on ? '' : 'none'
+  document.getElementById('chatCard').style.display = on ? 'none' : ''
+  document.getElementById('headerCard').style.display = on ? 'none' : ''
+  if (on) {
+    currentId = null
+    pendingDetail = null
+    projectPending = null
+    document.getElementById('projectView').style.display = 'none'
+    document.getElementById('domainView').style.display = 'none'
+    document.getElementById('matrixView').style.display = ''
+    document.body.classList.remove('project-mode')
+    document.getElementById('headerInfo').textContent = '新建中…'
+    setTimeout(() => document.getElementById('draftText').focus(), 0)
+  }
+}
+
+function startDraft() {
+  if (!currentProjectId) {
+    openProjectModal()
+    return
+  }
+  draftProjectId = currentProjectId
+  viewMode = 'matrix'
+  document.getElementById('draftText').value = ''
+  document.getElementById('draftStatus').textContent = ''
+  setDraftMode(true)
+  history.replaceState(null, '', location.pathname + location.search)
+}
+
+function cancelDraft() {
+  setDraftMode(false)
+  document.getElementById('headerInfo').textContent = '未选择'
+  if (currentProjectId) openProject(currentProjectId).catch(() => {})
+}
+
+async function select(id) {
+  setDraftMode(false)
+  viewMode = 'matrix'
+  document.body.classList.remove('project-mode')
+  document.getElementById('projectView').style.display = 'none'
+  document.getElementById('domainView').style.display = 'none'
+  document.getElementById('matrixView').style.display = ''
+  currentId = id
+  pendingDetail = null
+  projectPending = null
+  const detail = await api(`api/matrix/${id}`)
+  currentProjectId = detail.project_id || currentProjectId
+  await loadRewindPoints(detail)
+  history.replaceState(null, '', `#${id}`)
+  await loadProjects().catch(() => {})
+  renderDetail(detail)
+}
+
+/** 会话轮次撤回点按“会话 id + 归档末尾 seq”缓存，轮询时不会重复拉取。 */
+async function loadRewindPoints(detail) {
+  const key = `${detail.dsh_session_id || ''}:${detail.archive && detail.archive.length ? detail.archive[detail.archive.length - 1].seq : 0}`
+  if (key === rewindCacheKey) return currentRewindPoints
+  if (!detail.dsh_session_id) {
+    currentRewindPoints = []
+    rewindCacheKey = key
+    return currentRewindPoints
+  }
+  try {
+    const data = await api(`api/matrix/${detail.id}/rewind-points`)
+    currentRewindPoints = data.points || []
+  } catch {
+    currentRewindPoints = []
+  }
+  rewindCacheKey = key
+  return currentRewindPoints
+}
+
+/** 某条消息之前最近一个已完成轮次的 turn/end seq；没有更早轮次时返回 null。 */
+function rewindSeqBefore(time) {
+  if (!time || !currentRewindPoints.length) return null
+  let seq = null
+  for (const point of currentRewindPoints) {
+    if (String(point.at) < String(time)) seq = point.at_seq
+    else break
+  }
+  return seq
+}
+
+/* ===================== 项目视图 ===================== */
+async function loadProjects() {
+  const data = await api('api/projects')
+  projectsData = data.projects || []
+  const el = document.getElementById('projects')
+  if (!el) return
+  el.className = projectsData.length ? '' : 'empty'
+  el.innerHTML = projectsData.length ? projectsData.map(project => `
+    <div class="project-item ${project.id === currentProjectId ? 'active' : ''}" data-project-card="${esc(project.id)}">
+      <div style="display:flex;justify-content:space-between;gap:6px;align-items:center">
+        <strong>${esc(project.name)}</strong>${badge(project.state)}
+      </div>
+      <div class="hint">${esc(project.brief || '（无说明）')}</div>
+      <div class="row">
+        <span class="hint">根 ${project.roots}</span>
+        <span class="hint">可运行 ${project.runnable_roots}</span>
+        <span class="hint">已验收 ${project.accepted_roots}</span>
+        <span class="hint">归档 ${project.archived_roots || 0}</span>
+        <span class="hint">记忆 ${project.memory_entries}</span>
+      </div>
+      <div class="row" style="margin-top:6px">
+        <button class="primary" data-open-project="${esc(project.id)}">打开项目</button>
+        <span class="hint">最近打开 ${esc(project.last_opened_at ? project.last_opened_at.slice(0, 19).replace('T', ' ') : '—')}</span>
+      </div>
+    </div>`).join('') : '暂无项目，点「新建项目」开始。'
+  // 只有显式点「打开项目」才算使用过；点卡片本身不改变最近打开排序
+  el.querySelectorAll('[data-open-project]').forEach(button => {
+    button.onclick = event => {
+      event.stopPropagation()
+      openProject(button.dataset.openProject, { touch: true })
+    }
+  })
+}
+
+function openProjectModal() {
+  editingProjectId = null
+  document.getElementById('projectModalTitle').textContent = '新建项目'
+  document.getElementById('projectCreateBtn').textContent = '创建项目'
+  document.getElementById('projectName').value = ''
+  document.getElementById('projectBrief').value = ''
+  document.getElementById('projectCreateStatus').textContent = ''
+  document.getElementById('projectModal').style.display = 'flex'
+  setTimeout(() => document.getElementById('projectName').focus(), 0)
+}
+
+/** 编辑当前项目：改名或修改说明。 */
+function openProjectEditModal() {
+  if (!currentProject) return
+  editingProjectId = currentProject.id
+  document.getElementById('projectModalTitle').textContent = '编辑项目'
+  document.getElementById('projectCreateBtn').textContent = '保存'
+  document.getElementById('projectName').value = currentProject.name || ''
+  document.getElementById('projectBrief').value = currentProject.brief || ''
+  document.getElementById('projectCreateStatus').textContent = ''
+  document.getElementById('projectModal').style.display = 'flex'
+  setTimeout(() => document.getElementById('projectName').focus(), 0)
+}
+
+function closeProjectModal() {
+  document.getElementById('projectModal').style.display = 'none'
+}
+
+async function saveProjectFromModal() {
+  const name = document.getElementById('projectName').value.trim()
+  const brief = document.getElementById('projectBrief').value.trim()
+  const status = document.getElementById('projectCreateStatus')
+  if (!name) {
+    status.textContent = '请输入项目名称'
+    return
+  }
+  const button = document.getElementById('projectCreateBtn')
+  button.disabled = true
+  const editing = editingProjectId
+  status.textContent = editing ? '正在保存…' : '正在创建项目…'
+  try {
+    const detail = editing
+      ? await post(`api/projects/${editing}/update`, { name, brief })
+      : await post('api/projects', { name, brief })
+    closeProjectModal()
+    editingProjectId = null
+    await loadProjects()
+    await openProject(detail.id)
+  } catch (error) {
+    status.textContent = `${editing ? '保存' : '创建'}失败：${error.message}`
+  } finally {
+    button.disabled = false
+  }
+}
+
+async function openProject(id, options = {}) {
+  if (!id) return
+  setDraftMode(false)
+  viewMode = 'project'
+  currentDomainId = null
+  currentDomain = null
+  renderedProjectSignature = ''
+  currentId = null
+  currentDetail = null
+  pendingDetail = null
+  if (options.tab) projectTab = options.tab
+  if (options.reset) {
+    projectTab = 'overview'
+    projectSessionTab = 'all'
+  }
+  currentProjectId = id
+  history.replaceState(null, '', `#p/${id}`)
+  await loadTree()
+  // 只有显式「打开项目」才刷新 last_opened_at；内部跳转/回显不改变排序
+  const detail = options.touch
+    ? await post(`api/projects/${id}/open`, {})
+    : await api(`api/projects/${id}`)
+  await loadProjects().catch(() => {})
+  renderProject(detail)
+}
+
+function projectViewSignature(detail) {
+  return JSON.stringify([
+    detail.updated_at,
+    detail.state,
+    projectTab,
+    projectSessionTab,
+    (detail.roots || []).map(root => [root.id, root.state, root.children_accepted, root.children_total]),
+    (detail.archived_roots || []).map(root => [root.id, root.state, root.archived_at]),
+    (detail.memory && detail.memory.updated_at) || '',
+    (detail.archive || []).length,
+    (detail.questions || []).length,
+    (detail.oplog || []).length,
+    (detail.domains || []).map(domain => [domain.id, domain.name, domain.state, domain.implemented, domain.total, domain.updated_at]),
+    detail.agent ? [detail.agent.running, detail.agent.phase, detail.agent.tool] : null,
+  ])
+}
+
+function renderProject(detail) {
+  if (!detail || draftMode) return
+  const signature = projectViewSignature(detail)
+  // 轮询时数据没变就不整块重绘，避免打断正在输入/选择的内容
+  if (signature === renderedProjectSignature && document.getElementById('projectTabBody')) {
+    currentProject = detail
+    renderProjectStatus(detail)
+    return
+  }
+  renderedProjectSignature = signature
+  currentProject = detail
+  currentProjectId = detail.id
+  const prevInput = (document.getElementById('projectInputText') || {}).value || ''
+  const prevMemory = (document.getElementById('memoryText') || {}).value || ''
+  const prevScroll = (document.getElementById('projectMessages') || {}).scrollTop || 0
+  const tabs = [
+    ['overview', '概览'],
+    ['roots', '根 MATRIX'],
+    ['session', '项目会话'],
+    ['memory', '项目记忆'],
+    ['runs', '运行汇总'],
+    ['oplog', '操作日志'],
+    ['git', '版本'],
+    ['domains', '领域'],
+  ]
+  const el = document.getElementById('projectView')
+  el.innerHTML = `
+    <div class="card">
+      <div style="display:flex;gap:8px;align-items:center;margin-bottom:4px">
+        <strong>${esc(detail.name)}</strong>${badge(detail.state)}
+        <span class="hint">${esc(detail.id)}</span>
+        <button id="projectEditBtn">编辑项目</button>
+      </div>
+      <div class="hint">${esc(detail.brief || '（无项目说明）')}</div>
+      <div class="row" style="margin-top:8px">
+        <span class="hint">根 matrix ${detail.stats.roots}</span>
+        <span class="hint">归档 ${detail.stats.archived_roots || 0}</span>
+        <span class="hint">领域 ${(detail.domains || []).length}</span>
+        <span class="hint">matrix ${detail.stats.matrices}</span>
+        <span class="hint">运行 ${detail.stats.runs.total}</span>
+        <span class="hint">记忆 ${detail.memory.entries.length}</span>
+      </div>
+      <div class="project-tabs">${tabs.map(([key, label]) => `<button data-project-tab="${key}" class="${projectTab === key ? 'active' : ''}">${label}</button>`).join('')}</div>
+      <div id="projectTabBody"></div>
+    </div>`
+  el.querySelectorAll('[data-project-tab]').forEach(button => {
+    button.onclick = () => {
+      projectTab = button.dataset.projectTab
+      renderedProjectSignature = ''
+      renderProject(currentProject)
+    }
+  })
+  const editBtn = document.getElementById('projectEditBtn')
+  if (editBtn) editBtn.onclick = openProjectEditModal
+  renderProjectTab({ input: prevInput, memory: prevMemory, scroll: prevScroll })
+  renderProjectStatus(detail)
+  el.style.display = ''
+  document.getElementById('domainView').style.display = 'none'
+  document.getElementById('matrixView').style.display = 'none'
+  document.body.classList.add('project-mode')
+}
+
+function renderProjectStatus(detail) {
+  const typing = document.getElementById('projectTyping')
+  if (!typing) return
+  const agent = detail.agent
+  let label = ''
+  if (agent && agent.running) {
+    label = agent.phase === 'question'
+      ? 'agent 等待回答问题'
+      : agent.phase === 'tool'
+        ? `agent 执行中 · 正在执行工具${agent.tool ? ` · ${agent.tool}` : ''}`
+        : 'agent 执行中 · 等待模型响应'
+  }
+  typing.style.display = label ? 'flex' : 'none'
+  const text = typing.querySelector('i')
+  if (text) text.textContent = label || ''
+}
+
+function renderProjectTab(saved = {}) {
+  const body = document.getElementById('projectTabBody')
+  if (!body || !currentProject) return
+  if (projectTab === 'overview') {
+    body.innerHTML = projectOverviewHtml(currentProject)
+    bindProjectOverview()
+  } else if (projectTab === 'roots') {
+    body.innerHTML = projectRootsHtml(currentProject)
+    bindProjectRoots()
+  } else if (projectTab === 'session') {
+    body.innerHTML = projectSessionHtml(currentProject)
+    bindProjectSession(saved)
+  } else if (projectTab === 'memory') {
+    body.innerHTML = projectMemoryHtml(currentProject)
+    bindProjectMemory(saved)
+  } else if (projectTab === 'oplog') {
+    body.innerHTML = projectOplogHtml(currentProject)
+    bindProjectOplog()
+  } else if (projectTab === 'git') {
+    body.innerHTML = projectGitHtml(currentProject)
+    bindProjectGit()
+  } else if (projectTab === 'domains') {
+    body.innerHTML = projectDomainsHtml(currentProject)
+    bindProjectDomains()
+  } else {
+    body.innerHTML = projectRunsHtml(currentProject)
+    bindProjectRuns()
+  }
+}
+
+function projectOverviewHtml(detail) {
+  const states = Object.entries(detail.stats.by_state || {})
+    .map(([state, count]) => `<span class="badge ${esc(state)}">${esc(state)} ${count}</span>`).join(' ')
+  const roots = (detail.roots || []).map(root => `
+    <div class="root-card">
+      <div style="display:flex;gap:8px;align-items:center"><strong>${esc(root.name)}</strong>${badge(root.state)}</div>
+      <div class="hint">${esc(root.task || '')}</div>
+      <div class="row">
+        <span class="hint">子 ${root.children_accepted}/${root.children_total}</span>
+        <button data-open-matrix="${esc(root.id)}">打开</button>
+        ${root.runnable ? `<button class="primary" data-run-matrix="${esc(root.id)}">运行</button>` : ''}
+        <button data-archive-matrix="${esc(root.id)}">归档</button>
+        <button data-move-matrix="${esc(root.id)}">移动到项目…</button>
+      </div>
+    </div>`).join('')
+  const archived = (detail.archived_roots || []).map(root => `
+    <div class="root-card" style="opacity:.78">
+      <div style="display:flex;gap:8px;align-items:center"><strong>${esc(root.name)}</strong>${badge('archived')}</div>
+      <div class="row">
+        <button data-open-matrix="${esc(root.id)}">打开</button>
+        <button class="primary" data-restore-matrix="${esc(root.id)}">恢复</button>
+        <button data-move-matrix="${esc(root.id)}">移动到项目…</button>
+      </div>
+    </div>`).join('')
+  const memories = (detail.memory.entries || []).slice(-3).map(entry => `
+    <div class="mem-item"><div class="meta"><span>${esc(entry.id)}</span><span>${esc(entry.created_at)}</span></div>${esc(entry.text)}</div>`).join('')
+  return `
+    <div class="kv">
+      <div class="k">project_id</div><div>${esc(detail.id)}</div>
+      <div class="k">state</div><div>${esc(detail.state)}</div>
+      <div class="k">cwd</div><div>${esc(detail.cwd || '')}</div>
+      <div class="k">dsh_session</div><div>${esc(detail.dsh_session_id || '（未创建）')}</div>
+      <div class="k">created_at</div><div>${esc(detail.created_at)}</div>
+      <div class="k">updated_at</div><div>${esc(detail.updated_at)}</div>
+    </div>
+    <h2 class="hint" style="margin-top:12px">matrix 状态</h2>
+    <div class="row">${states || '<span class="hint">暂无 matrix</span>'}</div>
+    <h2 class="hint" style="margin-top:12px">根 MATRIX</h2>
+    ${roots || '<div class="empty">暂无根 matrix</div>'}
+    ${archived ? `<h2 class="hint" style="margin-top:14px">归档 MATRIX（${(detail.archived_roots || []).length}）</h2>${archived}` : ''}
+    <h2 class="hint" style="margin-top:12px">最近记忆</h2>
+    ${memories || '<div class="empty">暂无项目记忆</div>'}`
+}
+
+/** 概览与根 MATRIX 页签共用：打开、运行、归档、恢复、移动。 */
+function bindMatrixCardActions() {
+  document.querySelectorAll('#projectTabBody [data-open-matrix]').forEach(item => {
+    item.onclick = () => select(item.dataset.openMatrix)
+  })
+  document.querySelectorAll('#projectTabBody [data-run-matrix]').forEach(item => {
+    item.onclick = async () => {
+      item.disabled = true
+      try {
+        await runMatrixById(item.dataset.runMatrix)
+      } catch (error) {
+        const hint = document.getElementById('rootsHint')
+        if (hint) hint.textContent = `运行失败：${error.message}`
+      } finally {
+        item.disabled = false
+      }
+    }
+  })
+  document.querySelectorAll('#projectTabBody [data-archive-matrix]').forEach(item => {
+    item.onclick = () => setMatrixArchived(item.dataset.archiveMatrix, true)
+  })
+  document.querySelectorAll('#projectTabBody [data-restore-matrix]').forEach(item => {
+    item.onclick = () => setMatrixArchived(item.dataset.restoreMatrix, false)
+  })
+  document.querySelectorAll('#projectTabBody [data-move-matrix]').forEach(item => {
+    item.onclick = () => openMoveModal(item.dataset.moveMatrix)
+  })
+}
+
+function bindProjectOverview() {
+  bindMatrixCardActions()
+}
+
+function projectRootsHtml(detail) {
+  const anyRunnable = (detail.roots || []).some(root => root.runnable)
+  const rows = (detail.roots || []).map(root => `
+    <div class="root-card">
+      <div style="display:flex;gap:8px;align-items:center"><strong>${esc(root.name)}</strong>${badge(root.state)}</div>
+      <div class="hint">${esc(root.task || '')}</div>
+      <div class="row">
+        <span class="hint">子 ${root.children_accepted}/${root.children_total}</span>
+        <button data-open-matrix="${esc(root.id)}">打开</button>
+        ${root.runnable ? `<button class="primary" data-run-matrix="${esc(root.id)}">运行</button>` : ''}
+        <button data-archive-matrix="${esc(root.id)}">归档</button>
+        <button data-move-matrix="${esc(root.id)}">移动到项目…</button>
+      </div>
+    </div>`).join('')
+  const archived = (detail.archived_roots || []).map(root => `
+    <div class="root-card" style="opacity:.78">
+      <div style="display:flex;gap:8px;align-items:center"><strong>${esc(root.name)}</strong>${badge('archived')}
+        <span class="hint">${esc(root.archived_at || '')}</span></div>
+      <div class="hint">${esc(root.task || '')}</div>
+      <div class="row">
+        <span class="hint">子 ${root.children_accepted}/${root.children_total}</span>
+        <button data-open-matrix="${esc(root.id)}">打开</button>
+        <button class="primary" data-restore-matrix="${esc(root.id)}">恢复</button>
+        <button data-move-matrix="${esc(root.id)}">移动到项目…</button>
+      </div>
+    </div>`).join('')
+  return `
+    <div class="row">
+      <button class="primary" id="newRootMatrixBtn">＋ 新建根 matrix</button>
+      <button id="runRunnableBtn" ${anyRunnable ? '' : 'disabled'}>运行所有可运行</button>
+      <span class="hint" id="rootsHint"></span>
+    </div>
+    ${rows || '<div class="empty">这个项目还没有活跃的根 matrix</div>'}
+    ${archived ? `<h2 class="hint" style="margin-top:14px">归档 MATRIX（${archived.length}）</h2>${archived}` : ''}`
+}
+
+function bindProjectRoots() {
+  bindMatrixCardActions()
+  const newRoot = document.getElementById('newRootMatrixBtn')
+  if (newRoot) newRoot.onclick = startDraft
+  const runAll = document.getElementById('runRunnableBtn')
+  if (runAll) {
+    runAll.onclick = async () => {
+      runAll.disabled = true
+      try {
+        const result = await post(`api/projects/${currentProjectId}/run-runnable`, {})
+        const failed = result.results.filter(item => !item.ok)
+        const hint = document.getElementById('rootsHint')
+        if (hint) hint.textContent = failed.length
+          ? `完成 ${result.ran - failed.length} 个，失败 ${failed.length} 个`
+          : `已运行 ${result.ran} 个可运行根 matrix`
+        renderedProjectSignature = ''
+        await openProject(currentProjectId)
+      } catch (error) {
+        const hint = document.getElementById('rootsHint')
+        if (hint) hint.textContent = `批量运行失败：${error.message}`
+      } finally {
+        runAll.disabled = false
+      }
+    }
+  }
+}
+
+/** 归档/恢复根 matrix 后回到项目视图（归档项在「根 MATRIX」页签的归档区可见）。 */
+async function setMatrixArchived(matrixId, archived) {
+  try {
+    await post(`api/matrix/${matrixId}/archive`, { archived })
+    renderedProjectSignature = ''
+    await refresh()
+  } catch (error) {
+    window.alert(`${archived ? '归档' : '恢复'}失败：${error.message}`)
+  }
+}
+
+async function openMoveModal(matrixId) {
+  pendingMoveMatrixId = matrixId
+  await loadProjects().catch(() => {})
+  const matrix = (currentProject?.roots || []).concat(currentProject?.archived_roots || [])
+    .find(row => row.id === matrixId)
+  const currentName = currentProject ? currentProject.name : '（未知项目）'
+  document.getElementById('moveMatrixInfo').textContent = matrix
+    ? `${matrix.name}（${matrixId}） · 当前项目：${currentName}`
+    : `${matrixId} · 当前项目：${currentName}`
+  const candidates = (projectsData || []).filter(project => project.id !== currentProjectId && project.state === 'active')
+  const select = document.getElementById('moveTargetProject')
+  select.innerHTML = candidates.length
+    ? candidates.map(project => `<option value="${esc(project.id)}">${esc(project.name)}</option>`).join('')
+    : '<option value="">（没有其它可用项目）</option>'
+  document.getElementById('moveStatus').textContent = candidates.length ? '' : '请先新建一个项目'
+  document.getElementById('moveModal').style.display = 'flex'
+}
+
+function closeMoveModal() {
+  document.getElementById('moveModal').style.display = 'none'
+  pendingMoveMatrixId = null
+}
+
+async function confirmMove() {
+  const target = document.getElementById('moveTargetProject').value
+  if (!pendingMoveMatrixId || !target) return
+  const status = document.getElementById('moveStatus')
+  const button = document.getElementById('moveConfirmBtn')
+  button.disabled = true
+  status.textContent = '移动中…'
+  try {
+    await post(`api/matrix/${pendingMoveMatrixId}/move`, { target_project_id: target })
+    closeMoveModal()
+    renderedProjectSignature = ''
+    await loadProjects()
+    if (currentProjectId) await openProject(currentProjectId, { tab: 'roots' })
+    else await refresh()
+  } catch (error) {
+    status.textContent = `移动失败：${error.message}`
+  } finally {
+    button.disabled = false
+  }
+}
+
+/** 项目会话里没有撤回点：非对话内容同样折叠，只是不显示「撤回」。 */
+function projectArchiveHtml(entry) {
+  const savedPoints = currentRewindPoints
+  const savedRunning = currentAgentRunning
+  currentRewindPoints = []
+  currentAgentRunning = true
+  try {
+    return archiveHtml(entry)
+  } finally {
+    currentRewindPoints = savedPoints
+    currentAgentRunning = savedRunning
+  }
+}
+
+function matchesProjectTab(entry) {
+  if (projectSessionTab === 'chat') return entry.type === 'message'
+  if (projectSessionTab === 'dsh') return entry.type !== 'message' || entry.source === 'dsh'
+  return true
+}
+
+function projectSessionHtml(detail) {
+  const tabs = [['all', '全部'], ['chat', '对话'], ['dsh', 'dsh 轨迹']]
+  return `
+    <div class="session-tabs" id="projectSessionTabs">
+      ${tabs.map(([key, label]) => `<button data-project-session-tab="${key}" class="${projectSessionTab === key ? 'active' : ''}">${label}</button>`).join('')}
+    </div>
+    <div id="projectMessages"></div>
+    <div id="projectTyping" class="typing" style="display:none"><span></span><span></span><span></span><i>agent 执行中…</i></div>
+    <div id="projectQuestionCard" style="display:none;margin:8px 0;padding:8px;border:1px solid var(--line);border-radius:8px">
+      <h2 style="margin:0 0 6px">待回答问题</h2>
+      <div id="projectQuestionList"></div>
+    </div>
+    <textarea id="projectInputText" class="composer" placeholder="发给项目绑定的 dsh agent：由 agent 调用 project_* / matrix_* 工具；Enter 发送，Shift+Enter 换行"></textarea>
+    <div class="row" style="margin-top:8px"><button class="primary" id="projectSendBtn">提交输入</button></div>
+    <div class="hint">项目记忆会注入到项目会话的系统提示词，并落在 ${esc(detail.memory.file || '项目工作区')}。</div>`
+}
+
+function bindProjectSession(saved = {}) {
+  const box = document.getElementById('projectMessages')
+  if (box) {
+    const archive = currentProject.archive && currentProject.archive.length
+      ? currentProject.archive
+      : (currentProject.messages || [])
+    const list = archive.filter(matchesProjectTab)
+    box.innerHTML = list.length
+      ? list.map(entry => projectArchiveHtml(entry)).join('')
+      : '<div class="empty">当前 tab 还没有内容</div>'
+    if (saved.scroll) box.scrollTop = saved.scroll
+    else box.scrollTop = box.scrollHeight
+  }
+  document.querySelectorAll('#projectSessionTabs [data-project-session-tab]').forEach(button => {
+    button.onclick = () => {
+      projectSessionTab = button.dataset.projectSessionTab
+      renderedProjectSignature = ''
+      renderProject(currentProject)
+      const current = document.querySelector(`#projectSessionTabs [data-project-session-tab="${projectSessionTab}"]`)
+      if (current) current.classList.add('active')
+    }
+  })
+  const input = document.getElementById('projectInputText')
+  if (input) {
+    input.value = saved.input || ''
+    input.dataset.min = '78'
+    input.addEventListener('input', () => autosize(input))
+    input.addEventListener('keydown', event => {
+      if (event.key === 'Enter' && !event.shiftKey) {
+        event.preventDefault()
+        sendProjectChat()
+      }
+    })
+    autosize(input)
+  }
+  const button = document.getElementById('projectSendBtn')
+  if (button) button.onclick = sendProjectChat
+  renderProjectStatus(currentProject)
+  renderProjectQuestions(currentProject)
+}
+
+/** 项目会话里的 ask_user_question：答案按 project id 回传给仍在等待的 agent。 */
+function renderProjectQuestions(detail) {
+  const open = (detail.questions || []).filter(question => question.status === 'open')
+  const card = document.getElementById('projectQuestionCard')
+  if (!card) return
+  card.style.display = open.length ? '' : 'none'
+  const list = document.getElementById('projectQuestionList')
+  list.innerHTML = open.map(record => `
+    <div class="ticket-item" data-project-question-box="${esc(record.id)}">
+      <div><strong>${esc(record.session_id || 'dsh agent')}</strong><span class="hint">${esc(record.id)}</span></div>
+      ${(record.questions || []).map(question => `
+        <div style="margin-top:8px">
+          ${question.header ? `<div class="hint" style="margin:0">${esc(question.header)}</div>` : ''}
+          <div style="white-space:pre-wrap">${esc(question.question)}</div>
+          ${question.detail ? `<pre style="max-height:160px">${esc(question.detail)}</pre>` : ''}
+          ${(question.options || []).map(option => `
+            <label style="display:block;margin-top:4px">
+              <input type="${question.multiSelect ? 'checkbox' : 'radio'}" name="${esc(record.id)}-${esc(question.id)}" value="${esc(option.label)}" data-pqid="${esc(question.id)}">
+              ${esc(option.label)}
+              ${option.description ? `<span class="hint">${esc(option.description)}</span>` : ''}
+            </label>`).join('')}
+          <textarea class="composer" data-pqcustom="${esc(question.id)}" placeholder="自定义回答（选项之外）"></textarea>
+        </div>`).join('')}
+      <div class="row" style="margin-top:6px">
+        <button class="primary" data-project-question-answer="${esc(record.id)}">提交回答</button>
+        <button data-project-question-cancel="${esc(record.id)}">取消问题</button>
+      </div>
+    </div>`).join('')
+  list.querySelectorAll('[data-project-question-cancel]').forEach(button => {
+    button.onclick = async () => {
+      try {
+        await post(`api/questions/${button.dataset.projectQuestionCancel}/cancel`, {
+          matrix_id: detail.id, reason: '用户已在项目面板取消该问题',
+        })
+        renderedProjectSignature = ''
+        await openProject(detail.id)
+      } catch (error) {
+        window.alert(`取消失败：${error.message}`)
+      }
+    }
+  })
+  list.querySelectorAll('[data-project-question-answer]').forEach(button => {
+    button.onclick = async () => {
+      const id = button.dataset.projectQuestionAnswer
+      const record = open.find(item => item.id === id)
+      if (!record) return
+      const box = list.querySelector(`[data-project-question-box="${id}"]`)
+      const answers = (record.questions || []).map(question => {
+        const selected = [...box.querySelectorAll(`input[data-pqid="${question.id}"]:checked`)].map(input => input.value)
+        const customInput = box.querySelector(`[data-pqcustom="${question.id}"]`)
+        const custom = customInput ? customInput.value.trim() : ''
+        return { id: question.id, selected, ...(custom ? { custom } : {}) }
+      })
+      try {
+        await post(`api/questions/${id}/answer`, { matrix_id: detail.id, answers })
+        renderedProjectSignature = ''
+        await openProject(detail.id)
+      } catch (error) {
+        window.alert(`回答失败：${error.message}`)
+      }
+    }
+  })
+}
+
+async function sendProjectChat() {
+  const input = document.getElementById('projectInputText')
+  const text = input ? input.value.trim() : ''
+  if (!text || !currentProjectId) return
+  try {
+    await post(`api/projects/${currentProjectId}/chat`, { text })
+    input.value = ''
+    autosize(input)
+  } catch (error) {
+    const hint = document.getElementById('routingHint')
+    if (hint) hint.textContent = `发送失败：${error.message}`
+  }
+  renderedProjectSignature = ''
+  await openProject(currentProjectId)
+}
+
+function projectMemoryHtml(detail) {
+  const entries = detail.memory.entries || []
+  return `
+    <div class="hint">更新于 ${esc(detail.memory.updated_at)} · ${esc(detail.memory.file || '（项目 cwd 未设置）')}</div>
+    ${entries.length ? entries.map(entry => `
+      <div class="mem-item">
+        <div class="meta"><span>${esc(entry.id)} · ${esc(entry.updated_at || entry.created_at)}</span>
+          <button data-mem-remove="${esc(entry.id)}">删除</button></div>
+        ${esc(entry.text)}
+        ${entry.tags && entry.tags.length ? `<div class="hint">标签：${esc(entry.tags.join('、'))}</div>` : ''}
+      </div>`).join('') : '<div class="empty">暂无项目记忆</div>'}
+    <textarea id="memoryText" class="composer" placeholder="写入一条项目记忆（约束、约定、重要结论…）"></textarea>
+    <div class="row" style="margin-top:8px">
+      <button class="primary" id="memoryAddBtn">添加记忆</button>
+      <span class="hint" id="memoryHint"></span>
+    </div>`
+}
+
+function bindProjectMemory(saved = {}) {
+  const input = document.getElementById('memoryText')
+  if (input) {
+    input.value = saved.memory || ''
+    input.addEventListener('input', () => autosize(input))
+    autosize(input)
+  }
+  const add = document.getElementById('memoryAddBtn')
+  if (add) {
+    add.onclick = async () => {
+      const text = document.getElementById('memoryText').value.trim()
+      if (!text) return
+      add.disabled = true
+      try {
+        await post(`api/projects/${currentProjectId}/memory`, { action: 'add', text })
+        renderedProjectSignature = ''
+        await openProject(currentProjectId, { tab: 'memory' })
+      } catch (error) {
+        document.getElementById('memoryHint').textContent = `添加失败：${error.message}`
+      } finally {
+        add.disabled = false
+      }
+    }
+  }
+  document.querySelectorAll('#projectTabBody [data-mem-remove]').forEach(button => {
+    button.onclick = async () => {
+      try {
+        await post(`api/projects/${currentProjectId}/memory`, { action: 'remove', entry_id: button.dataset.memRemove })
+        renderedProjectSignature = ''
+        await openProject(currentProjectId, { tab: 'memory' })
+      } catch (error) {
+        document.getElementById('memoryHint').textContent = `删除失败：${error.message}`
+      }
+    }
+  })
+}
+
+function projectRunsHtml(detail) {
+  const runs = detail.runs || []
+  if (!runs.length) return '<div class="empty">这个项目还没有运行记录</div>'
+  return runs.map(run => `
+    <div class="tree-node" data-run="${esc(run.id)}">${esc(run.id)}${badge(run.status)}
+      <span class="hint">${esc(run.matrix_id)} · ${run.trace_count} 步 · ${esc(run.completed_at || run.created_at)}</span>
+    </div>`).join('')
+}
+
+function bindProjectRuns() {
+  document.querySelectorAll('#projectTabBody [data-run]').forEach(item => {
+    item.onclick = () => showRun(item.dataset.run)
+  })
+}
+
+const OPLOG_LABELS = {
+  project_create: '创建项目',
+  project_update: '更新项目',
+  project_archive: '归档项目',
+  project_chat: '项目会话',
+  project_run_runnable: '批量运行根 matrix',
+  memory_add: '新增记忆',
+  memory_update: '更新记忆',
+  memory_remove: '删除记忆',
+  matrix_move: '移出 matrix',
+  matrix_move_in: '移入 matrix',
+  matrix_archive: '归档 matrix',
+  matrix_restore: '恢复 matrix',
+  matrix_run: '运行 matrix',
+  matrix_accept: '验收 matrix',
+  matrix_prebuild: '启动预构建',
+  matrix_confirm_dag: '确认 DAG',
+  matrix_generate_dag: '生成 DAG',
+  matrix_reopen_dag: '回到 DAG 确认',
+  matrix_retry: '重试预构建',
+  matrix_cancel: '终止 matrix',
+  matrix_evaluate: '评估运行',
+  matrix_supervise: '监督分析',
+  matrix_revise: '提交修订',
+  matrix_revise_node: '修复节点',
+  matrix_input: '提交输入',
+  matrix_answer: '回答澄清',
+  matrix_resume: '恢复运行',
+  matrix_run_mode: '切换运行模式',
+  matrix_rewind: '会话撤回',
+  domain_create: '创建领域',
+  domain_update: '更新领域',
+  domain_archive: '归档领域',
+  domain_model_upsert: '保存 Model',
+  domain_stub_upsert: '保存 Stub',
+  domain_interact_upsert: '保存 Interact',
+  domain_model_remove: '删除 Model',
+  domain_stub_remove: '删除 Stub',
+  domain_interact_remove: '删除 Interact',
+  domain_matrix_intake: '创建元素根 matrix',
+  domain_bind_matrix: '绑定领域 matrix',
+}
+
+const oplogLabel = action => OPLOG_LABELS[String(action || '').replace(/-/g, '_')] || action
+
+function projectOplogHtml(detail) {
+  const rows = [...(detail.oplog || [])].reverse()
+  if (!rows.length) return '<div class="empty">暂无操作日志</div>'
+  return rows.map(entry => `
+    <div class="ticket-item" style="margin-top:0;margin-bottom:8px">
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+        <span class="badge ${entry.ok ? 'completed' : 'failed'}">${entry.ok ? '成功' : '失败'}</span>
+        <strong>${esc(oplogLabel(entry.action))}</strong>
+        ${entry.target_name ? `<span class="hint">${esc(entry.target_name)}</span>` : ''}
+        <span class="hint">${esc(entry.id)} · ${esc(entry.at)}</span>
+      </div>
+      ${entry.target_id ? `<div class="hint">${esc(entry.target_type)} · ${esc(entry.target_id)}</div>` : ''}
+      ${entry.error ? `<div class="msg agent" style="margin-top:6px">${esc(entry.error)}</div>` : ''}
+      ${entry.detail ? `<details class="msg agent folded" style="margin-top:6px"><summary><span class="meta">详情</span><span class="fold-preview">${esc(JSON.stringify(entry.detail))}</span></summary><div class="fold-body"><pre>${esc(JSON.stringify(entry.detail, null, 2))}</pre></div></details>` : ''}
+    </div>`).join('')
+}
+
+function bindProjectOplog() {
+  // 日志只读展示，无操作
+}
+
+function projectGitHtml(detail) {
+  return `
+    <div class="row" style="align-items:center">
+      <span class="hint" id="gitStatusText">读取仓库状态…</span>
+      <button id="gitRefreshBtn">刷新</button>
+      <button class="primary" id="gitInitBtn">初始化仓库</button>
+    </div>
+    <div class="row">
+      <input id="gitMessage" placeholder="提交说明（如：验收通过前）" style="flex:1" />
+      <button id="gitCommitBtn">提交 checkpoint</button>
+    </div>
+    <div class="hint" id="gitHint">快照包含项目元数据、matrix 定义与 work、运行记录、dsh 会话事件；关键操作会自动提交。</div>
+    <h2 class="hint" style="margin-top:10px">历史提交</h2>
+    <div id="gitHistory"><div class="empty">加载中…</div></div>
+    <details id="gitDiffBox" style="display:none;margin-top:10px">
+      <summary class="hint">差异</summary><pre id="gitDiff"></pre>
+    </details>
+    <div class="hint" style="margin-top:8px">项目 ${esc(detail.id)}</div>`
+}
+
+function setGitStatusText(git) {
+  const el = document.getElementById('gitStatusText')
+  if (!el) return
+  if (!git || !git.status) {
+    el.textContent = '仓库状态不可用'
+    return
+  }
+  const status = git.status
+  if (!status.enabled) {
+    el.textContent = `未初始化 Git · ${status.repo}`
+    el.className = 'hint'
+    return
+  }
+  el.textContent = `${status.branch || 'main'} @ ${status.head || '（尚无提交）'} · 未提交变更 ${status.changed_files || 0} 个 · ${status.repo}`
+  el.className = 'hint'
+}
+
+function renderGitHistory(git) {
+  const box = document.getElementById('gitHistory')
+  if (!box) return
+  const rows = (git && git.log) || []
+  if (!rows.length) {
+    box.innerHTML = '<div class="empty">还没有提交；初始化后点「提交 checkpoint」创建第一个快照。</div>'
+    return
+  }
+  box.innerHTML = rows.map(row => `
+    <div class="ticket-item" style="margin-top:0;margin-bottom:8px">
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+        <strong>${esc(row.commit)}</strong>
+        <span class="hint">${esc(row.date)}</span>
+        <span>${esc(row.subject)}</span>
+      </div>
+      <div class="row" style="margin-top:6px">
+        <button data-git-diff="${esc(row.commit)}">查看差异</button>
+        <button data-git-restore="${esc(row.commit)}">恢复到此快照</button>
+      </div>
+    </div>`).join('')
+  box.querySelectorAll('[data-git-diff]').forEach(button => {
+    button.onclick = () => showGitDiff(button.dataset.gitDiff)
+  })
+  box.querySelectorAll('[data-git-restore]').forEach(button => {
+    button.onclick = () => restoreGitCommit(button.dataset.gitRestore)
+  })
+}
+
+async function loadProjectGit() {
+  if (!currentProjectId) return null
+  const git = await api(`api/projects/${currentProjectId}/git`)
+  if (projectTab !== 'git' || !document.getElementById('gitStatusText')) return git
+  setGitStatusText(git)
+  renderGitHistory(git)
+  const initBtn = document.getElementById('gitInitBtn')
+  if (initBtn) initBtn.textContent = git.status && git.status.enabled ? '已初始化' : '初始化仓库'
+  if (initBtn) initBtn.disabled = Boolean(git.status && git.status.enabled)
+  return git
+}
+
+async function showGitDiff(commit) {
+  try {
+    const result = await post(`api/projects/${currentProjectId}/git`, { action: 'diff', commit })
+    const box = document.getElementById('gitDiffBox')
+    const pre = document.getElementById('gitDiff')
+    if (box && pre) {
+      box.style.display = ''
+      pre.textContent = result.stat || '（无差异）'
+    }
+  } catch (error) {
+    window.alert(`读取差异失败：${error.message}`)
+  }
+}
+
+/** 恢复是 checkpoint 回滚：会覆盖当前项目数据并重建 dsh 会话，必须二次确认。 */
+async function restoreGitCommit(commit) {
+  const message = `将项目回滚到提交 ${commit}：\n· 覆盖当前项目、matrix、work 与运行记录\n· 用快照重建 dsh 会话\n· 不回滚的提交仍保留在 Git 历史中\n\n确定继续？`
+  if (!window.confirm(message)) return
+  const hint = document.getElementById('gitHint')
+  if (hint) hint.textContent = '正在恢复快照…'
+  try {
+    const result = await post(`api/projects/${currentProjectId}/git`, { action: 'restore', commit })
+    if (hint) hint.textContent = `已恢复到 ${commit}，并生成新的 checkpoint ${result.result && result.result.checkpoint_commit ? result.result.checkpoint_commit : ''}`
+    renderedProjectSignature = ''
+    await loadProjects().catch(() => {})
+    await openProject(currentProjectId, { tab: 'git' })
+  } catch (error) {
+    if (hint) hint.textContent = `恢复失败：${error.message}`
+  }
+}
+
+function projectDomainsHtml(detail) {
+  const rows = (detail.domains || []).map(domain => {
+    const percent = domain.total ? Math.round(domain.implemented * 100 / domain.total) : 0
+    return `
+      <div class="root-card">
+        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+          <strong>${esc(domain.name)}</strong>${badge(domain.state)}
+          <span class="hint">${esc(domain.brief || '')}</span>
+        </div>
+        <div class="row">
+          <span class="hint">Models ${domain.models}</span>
+          <span class="hint">Stubs ${domain.stubs}</span>
+          <span class="hint">Interacts ${domain.interacts}</span>
+          <span class="hint">已实现 ${domain.implemented}/${domain.total}（${percent}%）</span>
+        </div>
+        <div class="row" style="margin-top:6px">
+          <button class="primary" data-open-domain="${esc(domain.id)}">打开领域</button>
+          <span class="hint">${esc(domain.id)} · 更新 ${esc(domain.updated_at || '')}</span>
+        </div>
+      </div>`
+  }).join('')
+  return `
+    <div class="row">
+      <button class="primary" id="newDomainBtn">＋ 新建领域</button>
+      <span class="hint">领域是限界上下文，每个 Model / Stub / Interact 各绑定一个根 matrix。</span>
+    </div>
+    ${rows || '<div class="empty">这个项目还没有领域</div>'}`
+}
+
+function bindProjectDomains() {
+  document.querySelectorAll('#projectTabBody [data-open-domain]').forEach(button => {
+    button.onclick = () => openDomain(button.dataset.openDomain)
+  })
+  const newBtn = document.getElementById('newDomainBtn')
+  if (newBtn) newBtn.onclick = () => openDomainModal(null)
+}
+
+function openDomainModal(domain) {
+  editingDomainId = domain ? domain.id : null
+  document.getElementById('domainModalTitle').textContent = domain ? '编辑领域' : '新建领域'
+  document.getElementById('domainSaveBtn').textContent = domain ? '保存' : '创建领域'
+  document.getElementById('domainName').value = domain ? domain.name : ''
+  document.getElementById('domainBrief').value = domain ? (domain.brief || '') : ''
+  document.getElementById('domainUbiquitous').value = domain ? (domain.ubiquitous_language || []).join('\n') : ''
+  document.getElementById('domainSaveStatus').textContent = ''
+  document.getElementById('domainModal').style.display = 'flex'
+  setTimeout(() => document.getElementById('domainName').focus(), 0)
+}
+
+function closeDomainModal() {
+  document.getElementById('domainModal').style.display = 'none'
+}
+
+async function saveDomainFromModal() {
+  const name = document.getElementById('domainName').value.trim()
+  const brief = document.getElementById('domainBrief').value.trim()
+  const ubiquitous = document.getElementById('domainUbiquitous').value.split('\n').map(line => line.trim()).filter(Boolean)
+  const status = document.getElementById('domainSaveStatus')
+  if (!name) {
+    status.textContent = '请输入领域名称'
+    return
+  }
+  const button = document.getElementById('domainSaveBtn')
+  button.disabled = true
+  const editing = editingDomainId
+  status.textContent = editing ? '正在保存…' : '正在创建领域…'
+  try {
+    let detail
+    if (editing) {
+      detail = await post(`api/domains/${editing}/update`, { name, brief, ubiquitous_language: ubiquitous })
+    } else {
+      detail = await post(`api/projects/${currentProjectId}/domains`, { name, brief, ubiquitous_language: ubiquitous })
+    }
+    closeDomainModal()
+    editingDomainId = null
+    renderedProjectSignature = ''
+    await loadProjects().catch(() => {})
+    if (editing) await openDomain(editing)
+    else await openDomain(detail.id)
+  } catch (error) {
+    status.textContent = `${editing ? '保存' : '创建'}失败：${error.message}`
+  } finally {
+    button.disabled = false
+  }
+}
+
+function bindProjectGit() {
+  const initBtn = document.getElementById('gitInitBtn')
+  if (initBtn) {
+    initBtn.onclick = async () => {
+      initBtn.disabled = true
+      try {
+        await post(`api/projects/${currentProjectId}/git`, { action: 'init' })
+      } catch (error) {
+        const hint = document.getElementById('gitHint')
+        if (hint) hint.textContent = `初始化失败：${error.message}`
+      }
+      await loadProjectGit().catch(() => {})
+    }
+  }
+  const commitBtn = document.getElementById('gitCommitBtn')
+  if (commitBtn) {
+    commitBtn.onclick = async () => {
+      const message = (document.getElementById('gitMessage') || {}).value || ''
+      commitBtn.disabled = true
+      try {
+        const result = await post(`api/projects/${currentProjectId}/git`, { action: 'commit', message })
+        const hint = document.getElementById('gitHint')
+        if (hint) {
+          hint.textContent = result.result && result.result.skipped
+            ? '没有变更，未创建新提交'
+            : `已提交 ${result.result && result.result.commit ? result.result.commit : ''}`
+        }
+        await loadProjectGit()
+      } catch (error) {
+        const hint = document.getElementById('gitHint')
+        if (hint) hint.textContent = `提交失败：${error.message}`
+      } finally {
+        commitBtn.disabled = false
+      }
+    }
+  }
+  const refreshBtn = document.getElementById('gitRefreshBtn')
+  if (refreshBtn) refreshBtn.onclick = () => loadProjectGit()
+  loadProjectGit().catch(error => {
+    const hint = document.getElementById('gitHint')
+    if (hint) hint.textContent = `读取版本状态失败：${error.message}`
+  })
+}
+
+/* ===================== 领域视图 ===================== */
+async function openDomain(id, options = {}) {
+  if (!id) return
+  setDraftMode(false)
+  viewMode = 'domain'
+  renderedDomainSignature = ''
+  currentDomainId = id
+  currentId = null
+  currentDetail = null
+  pendingDetail = null
+  if (options.tab) domainTab = options.tab
+  history.replaceState(null, '', `#d/${id}`)
+  const detail = await api(`api/domains/${id}`)
+  currentProjectId = detail.project_id || currentProjectId
+  await loadTree()
+  await loadProjects().catch(() => {})
+  document.getElementById('projectView').style.display = 'none'
+  document.getElementById('domainView').style.display = ''
+  document.getElementById('matrixView').style.display = 'none'
+  document.body.classList.add('project-mode')
+  renderDomain(detail)
+}
+
+function domainViewSignature(detail) {
+  return JSON.stringify([
+    detail.updated_at,
+    detail.state,
+    domainTab,
+    domainSessionTab,
+    detail.coverage,
+    (detail.models || []).map(item => [item.id, item.name, item.kind, item.matrix && item.matrix.state]),
+    (detail.stubs || []).map(item => [item.id, item.name, item.kind, item.matrix && item.matrix.state]),
+    (detail.interacts || []).map(item => [item.id, item.name, item.kind, item.matrix && item.matrix.state]),
+    (detail.archive || []).length,
+    (detail.questions || []).length,
+    (detail.memory && detail.memory.updated_at) || '',
+    (detail.oplog || []).length,
+    detail.agent ? [detail.agent.running, detail.agent.phase, detail.agent.tool] : null,
+  ])
+}
+
+function renderDomain(detail) {
+  if (!detail || draftMode) return
+  const signature = domainViewSignature(detail)
+  if (signature === renderedDomainSignature && document.getElementById('domainTabBody')) {
+    currentDomain = detail
+    renderDomainStatus(detail)
+    return
+  }
+  renderedDomainSignature = signature
+  currentDomain = detail
+  currentDomainId = detail.id
+  const prevInput = (document.getElementById('domainInput') || {}).value || ''
+  const prevMemory = (document.getElementById('domainMemoryText') || {}).value || ''
+  const prevScroll = (document.getElementById('domainMessages') || {}).scrollTop || 0
+  const tabs = [
+    ['overview', '概览'],
+    ['models', 'Models'],
+    ['stubs', 'Stubs'],
+    ['interacts', 'Interacts'],
+    ['capabilities', '能力导出/导入'],
+    ['session', '领域会话'],
+    ['memory', '领域记忆'],
+    ['oplog', '操作日志'],
+  ]
+  const el = document.getElementById('domainView')
+  el.innerHTML = `
+    <div class="card">
+      <div style="display:flex;gap:8px;align-items:center;margin-bottom:4px;flex-wrap:wrap">
+        <strong>${esc(detail.name)}</strong>${badge(detail.state)}
+        <span class="hint">项目 ${esc(detail.project_name || detail.project_id)} · ${esc(detail.id)}</span>
+        <button id="domainBackBtn">← 返回项目</button>
+        <button id="domainEditBtn">编辑领域</button>
+      </div>
+      <div class="hint">${esc(detail.brief || '（无领域说明）')}</div>
+      <div class="row" style="margin-top:8px">
+        <span class="hint">Models ${detail.coverage.models.implemented}/${detail.coverage.models.total}</span>
+        <span class="hint">Stubs ${detail.coverage.stubs.implemented}/${detail.coverage.stubs.total}</span>
+        <span class="hint">Interacts ${detail.coverage.interacts.implemented}/${detail.coverage.interacts.total}</span>
+        <span class="hint">领域记忆 ${detail.memory.entries.length}</span>
+      </div>
+      <div class="project-tabs">${tabs.map(([key, label]) => `<button data-domain-tab="${key}" class="${domainTab === key ? 'active' : ''}">${label}</button>`).join('')}</div>
+      <div id="domainTabBody"></div>
+    </div>`
+  el.querySelectorAll('[data-domain-tab]').forEach(button => {
+    button.onclick = () => {
+      domainTab = button.dataset.domainTab
+      renderedDomainSignature = ''
+      renderDomain(currentDomain)
+    }
+  })
+  document.getElementById('domainBackBtn').onclick = () => openProject(detail.project_id, { tab: 'domains' })
+  document.getElementById('domainEditBtn').onclick = () => openDomainModal(detail)
+  renderDomainTab({ input: prevInput, memory: prevMemory, scroll: prevScroll })
+  renderDomainStatus(detail)
+}
+
+function renderDomainStatus(detail) {
+  const typing = document.getElementById('domainTyping')
+  if (!typing) return
+  const agent = detail.agent
+  let label = ''
+  if (agent && agent.running) {
+    label = agent.phase === 'question'
+      ? '领域 agent 等待回答问题'
+      : agent.phase === 'tool'
+        ? `领域 agent 执行中 · ${agent.tool || '工具'}`
+        : '领域 agent 执行中 · 等待模型响应'
+  }
+  typing.style.display = label ? 'flex' : 'none'
+  const text = typing.querySelector('i')
+  if (text) text.textContent = label || ''
+}
+
+function renderDomainTab(saved = {}) {
+  const body = document.getElementById('domainTabBody')
+  if (!body || !currentDomain) return
+  if (domainTab === 'overview') {
+    body.innerHTML = domainOverviewHtml(currentDomain)
+    bindDomainElements('overview')
+  } else if (domainTab === 'models') {
+    body.innerHTML = domainElementsHtml(currentDomain, 'model')
+    bindDomainElements('model')
+  } else if (domainTab === 'stubs') {
+    body.innerHTML = domainElementsHtml(currentDomain, 'stub')
+    bindDomainElements('stub')
+  } else if (domainTab === 'interacts') {
+    body.innerHTML = domainElementsHtml(currentDomain, 'interact')
+    bindDomainElements('interact')
+  } else if (domainTab === 'capabilities') {
+    body.innerHTML = domainCapabilitiesHtml(currentDomain)
+    bindDomainCapabilities()
+  } else if (domainTab === 'session') {
+    body.innerHTML = domainSessionHtml(currentDomain)
+    bindDomainSession(saved)
+  } else if (domainTab === 'memory') {
+    body.innerHTML = domainMemoryHtml(currentDomain)
+    bindDomainMemory(saved)
+  } else {
+    body.innerHTML = projectOplogHtml(currentDomain)
+    bindProjectOplog()
+  }
+}
+
+function domainOverviewHtml(detail) {
+  const coverage = detail.coverage
+  const rows = [
+    ['project_id', detail.project_id],
+    ['domain_id', detail.id],
+    ['限界上下文', detail.bounded_context],
+    ['state', detail.state],
+    ['cwd', detail.cwd || ''],
+    ['父会话', detail.parent_session_id || ''],
+    ['dsh_session', detail.dsh_session_id || '（未创建）'],
+    ['created_at', detail.created_at],
+  ]
+  const elements = [
+    ['Models', `${coverage.models.implemented}/${coverage.models.total}`],
+    ['Stubs', `${coverage.stubs.implemented}/${coverage.stubs.total}`],
+    ['Interacts', `${coverage.interacts.implemented}/${coverage.interacts.total}`],
+  ]
+  const memory = (detail.memory.entries || []).slice(-3).map(entry => `
+    <div class="mem-item"><div class="meta"><span>${esc(entry.id)}</span><span>${esc(entry.created_at)}</span></div>${esc(entry.text)}</div>`).join('')
+  const language = (detail.ubiquitous_language || []).map(item => `<span class="node-field">${esc(item)}</span>`).join('')
+  return `
+    <div class="kv">${rows.map(([key, value]) => `<div class="k">${esc(key)}</div><div>${esc(value)}</div>`).join('')}</div>
+    <h2 class="hint" style="margin-top:12px">覆盖率</h2>
+    <div class="row">${elements.map(([key, value]) => `<span class="badge">${esc(key)} ${esc(value)}</span>`).join('')}</div>
+    <h2 class="hint" style="margin-top:12px">通用语言</h2>
+    <div class="node-fields">${language || '<span class="hint">未填写</span>'}</div>
+    <h2 class="hint" style="margin-top:12px">最近领域记忆</h2>
+    ${memory || '<div class="empty">暂无领域记忆</div>'}`
+}
+
+const ELEMENT_LABELS = { model: 'Model', stub: 'Stub', interact: 'Interact' }
+const pluralKey = kind => `${kind}s`
+
+function elementNameOf(detail, kind, id) {
+  const list = detail[pluralKey(kind)] || []
+  return list.find(item => item.id === id)?.name || id
+}
+
+function elementMatrixHtml(element) {
+  if (!element.matrix) {
+    return `<button class="primary" data-element-matrix="${esc(element.id)}">生成根 matrix</button>`
+  }
+  if (element.matrix.missing) return `<span class="hint">matrix 缺失：${esc(element.matrix.id)}</span>`
+  return `${badge(element.matrix.state)} <button data-open-matrix="${esc(element.matrix.id)}">打开 matrix</button>`
+}
+
+function elementDetailHtml(detail, kind, element) {
+  if (kind === 'model') {
+    return `
+      <div class="row">
+        <span class="hint">角色 ${esc(element.type)}</span>
+        <span class="hint">类型 ${esc(element.kind)}</span>
+        <span class="hint">属性 ${(element.attributes || []).length}</span>
+        <span class="hint">不变量 ${(element.invariants || []).length}</span>
+      </div>
+      ${element.invariants && element.invariants.length ? `<div class="hint">不变量：${esc(element.invariants.join('；'))}</div>` : ''}
+      ${element.relations && element.relations.length ? `<div class="hint">关系：${element.relations.map(relation => esc(relation.target_model_id ? `${relation.kind} → ${elementNameOf(detail, 'model', relation.target_model_id)}` : relation.kind)).join('、')}</div>` : ''}`
+  }
+  if (kind === 'stub') {
+    const operations = (element.operations || []).map(operation => {
+      const requests = (operation.request_model_ids || []).map(id => elementNameOf(detail, 'model', id)).join('、') || '—'
+      const responses = (operation.response_model_ids || []).map(id => elementNameOf(detail, 'model', id)).join('、') || '—'
+      return `${operation.name}: ${requests} → ${responses}`
+    })
+    return `
+      <div class="row">
+        <span class="hint">类型 ${esc(element.kind)}</span>
+        <span class="hint">操作 ${(element.operations || []).length}</span>
+      </div>
+      ${operations.length ? `<div class="hint">契约：${esc(operations.join('；'))}</div>` : ''}`
+  }
+  const requests = (element.request_model_ids || []).map(id => elementNameOf(detail, 'model', id))
+  const responses = (element.response_model_ids || []).map(id => elementNameOf(detail, 'model', id))
+  const stubs = (element.stub_ids || []).map(id => elementNameOf(detail, 'stub', id))
+  return `
+    <div class="row">
+      <span class="hint">类型 ${esc(element.kind)}</span>
+      <span class="hint">Actor ${esc((element.actors || []).join('、') || '—')}</span>
+      <span class="hint">请求 ${esc(requests.join('、') || '—')}</span>
+      <span class="hint">响应 ${esc(responses.join('、') || '—')}</span>
+      <span class="hint">服务 ${esc(stubs.join('、') || '—')}</span>
+    </div>
+    ${element.preconditions && element.preconditions.length ? `<div class="hint">前置：${esc(element.preconditions.join('；'))}</div>` : ''}
+    ${element.main_flow && element.main_flow.length ? `<div class="hint">主流程：${esc(element.main_flow.join(' → '))}</div>` : ''}`
+}
+
+function domainElementsHtml(detail, kind) {
+  const list = detail[pluralKey(kind)] || []
+  const rows = list.map(element => `
+    <div class="root-card">
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+        <strong>${esc(element.name)}</strong>${badge(element.kind)}
+        ${element.readonly ? '<span class="badge">导入</span>' : ''}
+        <span class="hint">${esc(element.id)}</span>
+      </div>
+      <div class="hint">${esc(element.description || '（无描述）')}</div>
+      ${element.readonly && element.origin
+        ? `<div class="hint">导入自 ${esc(element.origin.export_id)} v${esc(element.origin.version)}（只读契约，升级走能力页）</div>`
+        : ''}
+      ${element.contract_errors && element.contract_errors.length ? `<div class="hint" style="color:var(--red,#c00)">待修复：${esc(element.contract_errors.join('；'))}</div>` : ''}
+      ${elementDetailHtml(detail, kind, element)}
+      <div class="row" style="margin-top:6px">
+        ${elementMatrixHtml(element)}
+        ${element.readonly
+          ? '<span class="hint">导入项不可编辑或删除</span>'
+          : `<button data-element-edit="${esc(element.id)}">编辑</button>
+             <button data-element-remove="${esc(element.id)}">删除</button>`}
+      </div>
+    </div>`).join('')
+  return `
+    <div class="row">
+      <button class="primary" id="newElementBtn">＋ 新建 ${ELEMENT_LABELS[kind]}</button>
+      <span class="hint">每个元素最多一个根 matrix；复合结构在根 DAG 内用 group 拆分。</span>
+    </div>
+    ${rows || `<div class="empty">还没有 ${ELEMENT_LABELS[kind]}</div>`}`
+}
+
+function bindDomainElements(kind) {
+  if (kind === 'overview') return
+  const newBtn = document.getElementById('newElementBtn')
+  if (newBtn) newBtn.onclick = () => openElementModal(kind, null)
+  const list = currentDomain[pluralKey(kind)] || []
+  document.querySelectorAll('#domainTabBody [data-element-edit]').forEach(button => {
+    button.onclick = () => openElementModal(kind, list.find(item => item.id === button.dataset.elementEdit) || null)
+  })
+  document.querySelectorAll('#domainTabBody [data-element-remove]').forEach(button => {
+    button.onclick = async () => {
+      if (!window.confirm('确定删除该领域元素？')) return
+      try {
+        await post(`api/domains/${currentDomainId}/remove`, { kind, element_id: button.dataset.elementRemove })
+        renderedDomainSignature = ''
+        await openDomain(currentDomainId, { tab: domainTab })
+      } catch (error) {
+        window.alert(`删除失败：${error.message}`)
+      }
+    }
+  })
+  document.querySelectorAll('#domainTabBody [data-element-matrix]').forEach(button => {
+    button.onclick = async () => {
+      button.disabled = true
+      try {
+        const result = await post(`api/domains/${currentDomainId}/matrix-intake`, { kind, element_id: button.dataset.elementMatrix })
+        renderedDomainSignature = ''
+        await openDomain(currentDomainId, { tab: domainTab })
+        if (result.created_matrix_id) await select(result.created_matrix_id)
+      } catch (error) {
+        window.alert(`创建根 matrix 失败：${error.message}`)
+      } finally {
+        button.disabled = false
+      }
+    }
+  })
+  document.querySelectorAll('#domainTabBody [data-open-matrix]').forEach(button => {
+    button.onclick = () => select(button.dataset.openMatrix)
+  })
+}
+
+async function refreshDomainCapabilities() {
+  renderedDomainSignature = ''
+  await openDomain(currentDomainId, { tab: 'capabilities' })
+}
+
+function domainCapabilitiesHtml(detail) {
+  const exports = detail.exports || []
+  const imports = detail.imports || []
+  const exportRows = exports.map(item => `
+    <div class="root-card">
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+        <strong>${esc(item.name || item.id)}</strong><span class="badge">v${esc(item.version)}</span>
+        <span class="hint">${esc(item.id)}</span>
+      </div>
+      <div class="hint">${(item.model_ids || []).length} 个 Model · ${(item.stub_ids || []).length} 个 Stub · ${esc(item.created_at || '')}</div>
+      <div class="row"><button data-copy-export="${esc(item.id)}">复制 export_id</button></div>
+    </div>`).join('')
+  const importRows = imports.map(item => `
+    <div class="root-card">
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+        <strong>${esc(item.export_id)}</strong><span class="badge">v${esc(item.version)}</span>
+      </div>
+      <div class="hint">provider ${esc(item.provider_domain_id)} · 本地副本 ${Object.keys(item.model_map || {}).length} Models / ${Object.keys(item.stub_map || {}).length} Stubs</div>
+      <div class="hint">导入于 ${esc(item.imported_at || '')}${item.upgraded_at ? ` · 升级于 ${esc(item.upgraded_at)}` : ''}</div>
+      <div class="row">
+        <button data-import-upgrade="${esc(item.id)}">升级到最新版本</button>
+        <button data-import-remove="${esc(item.id)}">移除导入</button>
+      </div>
+    </div>`).join('')
+  return `
+    <div class="row">
+      <input id="exportName" placeholder="能力名称（默认领域名）" style="flex:1" />
+      <button class="primary" id="exportCreateBtn">导出当前能力</button>
+    </div>
+    <div class="hint">导出只包含 request/response Model 与 Stub；persistence Model、Interact、matrix 定义与运行数据不会导出。</div>
+    <h2 class="hint" style="margin-top:12px">本领域导出</h2>
+    ${exportRows || '<div class="empty">还没有导出包</div>'}
+    <h2 class="hint" style="margin-top:12px">已导入能力</h2>
+    ${importRows || '<div class="empty">还没有导入能力</div>'}
+    <h2 class="hint" style="margin-top:12px">能力注册表</h2>
+    <div class="row">
+      <input id="registryQuery" placeholder="按名称 / Model / Stub 过滤" style="flex:1" />
+      <button id="registrySearchBtn">查询</button>
+    </div>
+    <div id="registryResults" class="hint">点击查询浏览可导入能力。</div>`
+}
+
+function bindDomainCapabilities() {
+  const createBtn = document.getElementById('exportCreateBtn')
+  if (createBtn) {
+    createBtn.onclick = async () => {
+      createBtn.disabled = true
+      try {
+        const name = (document.getElementById('exportName') || {}).value?.trim()
+        await post(`api/domains/${currentDomainId}/export-create`, name ? { name } : {})
+        await refreshDomainCapabilities()
+      } catch (error) {
+        window.alert(`导出失败：${error.message}`)
+      } finally {
+        createBtn.disabled = false
+      }
+    }
+  }
+  document.querySelectorAll('#domainTabBody [data-copy-export]').forEach(button => {
+    button.onclick = async () => {
+      try {
+        await navigator.clipboard.writeText(button.dataset.copyExport)
+        button.textContent = '已复制'
+      } catch {
+        window.prompt('请手动复制 export_id', button.dataset.copyExport)
+      }
+    }
+  })
+  document.querySelectorAll('#domainTabBody [data-import-upgrade]').forEach(button => {
+    button.onclick = async () => {
+      button.disabled = true
+      try {
+        const result = await post(`api/domains/${currentDomainId}/import-upgrade`, { import_id: button.dataset.importUpgrade })
+        const diff = result.upgrade_diff || {}
+        const summary = `v${diff.version_from} → v${diff.version_to}；新增 Model ${(diff.added_models || []).length}、Stub ${(diff.added_stubs || []).length}；移除 Model ${(diff.removed_models || []).length}、Stub ${(diff.removed_stubs || []).length}；契约变更 ${(diff.changed_models || []).length + (diff.changed_stubs || []).length}`
+        window.alert(`升级完成：${summary}`)
+        await refreshDomainCapabilities()
+      } catch (error) {
+        window.alert(`升级失败：${error.message}`)
+      } finally {
+        button.disabled = false
+      }
+    }
+  })
+  document.querySelectorAll('#domainTabBody [data-import-remove]').forEach(button => {
+    button.onclick = async () => {
+      if (!window.confirm('确定移除该导入？被本地引用时会被拒绝。')) return
+      button.disabled = true
+      try {
+        await post(`api/domains/${currentDomainId}/import-remove`, { import_id: button.dataset.importRemove })
+        await refreshDomainCapabilities()
+      } catch (error) {
+        window.alert(`移除失败：${error.message}`)
+      } finally {
+        button.disabled = false
+      }
+    }
+  })
+  const searchBtn = document.getElementById('registrySearchBtn')
+  if (searchBtn) {
+    searchBtn.onclick = async () => {
+      const results = document.getElementById('registryResults')
+      searchBtn.disabled = true
+      results.innerHTML = '查询中…'
+      try {
+        const query = (document.getElementById('registryQuery') || {}).value?.trim() || ''
+        const data = await api(`api/registry/exports${query ? `?q=${encodeURIComponent(query)}` : ''}`)
+        const rows = data.exports || []
+        results.innerHTML = rows.length ? rows.map(row => `
+          <div class="root-card">
+            <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+              <strong>${esc(row.name)}</strong><span class="badge">v${esc(row.version)}</span>
+              <span class="hint">${esc(row.export_id)}</span>
+            </div>
+            <div class="hint">${esc(row.summary || '（无摘要）')}</div>
+            <div class="hint">${esc(row.domain_id)} · ${row.model_count} Models · ${row.stub_count} Stubs · ${esc(row.created_at)}</div>
+            <div class="row"><button data-registry-import="${esc(row.export_id)}">导入到当前领域</button></div>
+          </div>`).join('') : '<div class="empty">没有匹配的导出包</div>'
+        results.querySelectorAll('[data-registry-import]').forEach(button => {
+          button.onclick = async () => {
+            button.disabled = true
+            try {
+              await post(`api/domains/${currentDomainId}/import-apply`, { export_id: button.dataset.registryImport })
+              await refreshDomainCapabilities()
+            } catch (error) {
+              window.alert(`导入失败：${error.message}`)
+            } finally {
+              button.disabled = false
+            }
+          }
+        })
+      } catch (error) {
+        results.innerHTML = `<div class="hint">查询失败：${esc(error.message)}</div>`
+      } finally {
+        searchBtn.disabled = false
+      }
+    }
+  }
+}
+
+const ELEMENT_KIND_OPTIONS = {
+  model: ['entity', 'value_object', 'domain_event'],
+  stub: ['repository', 'domain_service', 'external_service', 'acl', 'notification', 'other'],
+  interact: ['command', 'query', 'use_case'],
+}
+
+function elementExtraHtml(kind, element) {
+  if (kind === 'model') {
+    const type = element ? element.type : 'persistence'
+    return `
+      <label class="hint">模型角色</label>
+      <select id="elementModelType" style="width:100%;margin-bottom:8px">
+        ${['request', 'response', 'persistence'].map(option => `<option value="${option}" ${type === option ? 'selected' : ''}>${option}</option>`).join('')}
+      </select>
+      <textarea id="elementAttributes" class="composer" placeholder='属性 JSON，例如 [{"name":"id","type":"string","required":true}]'>${esc(element ? JSON.stringify(element.attributes || [], null, 2) : '')}</textarea>
+      <textarea id="elementInvariants" class="composer" placeholder="不变量，一行一个">${esc(element ? (element.invariants || []).join('\n') : '')}</textarea>
+      <textarea id="elementRelations" class="composer" placeholder='关系 JSON，例如 [{"target_model_id":"mdl_x","kind":"1:N"}]'>${esc(element ? JSON.stringify(element.relations || [], null, 2) : '')}</textarea>`
+  }
+  if (kind === 'stub') {
+    return `<textarea id="elementOperations" class="composer" placeholder='操作 JSON，例如 [{"name":"reserve","request_model_ids":["mdl_req"],"response_model_ids":["mdl_resp"]}]'>${esc(element ? JSON.stringify(element.operations || [], null, 2) : '')}</textarea>`
+  }
+  const modelOptions = (type, field) => (currentDomain.models || []).filter(item => item.type === type)
+    .map(item => `<option value="${esc(item.id)}" ${element && (element[field] || []).includes(item.id) ? 'selected' : ''}>${esc(item.name)}</option>`).join('')
+  const stubOptions = (currentDomain.stubs || []).map(item => `<option value="${esc(item.id)}" ${element && (element.stub_ids || []).includes(item.id) ? 'selected' : ''}>${esc(item.name)}</option>`).join('')
+  return `
+    <input id="elementActors" placeholder="Actor，逗号分隔" value="${esc(element ? (element.actors || []).join(',') : '')}" style="width:100%" />
+    <div class="row" style="margin-top:8px">
+      <label style="flex:1"><span class="hint">请求 Models</span><select id="elementRequestModels" multiple style="min-height:90px;width:100%">${modelOptions('request', 'request_model_ids')}</select></label>
+      <label style="flex:1"><span class="hint">响应 Models</span><select id="elementResponseModels" multiple style="min-height:90px;width:100%">${modelOptions('response', 'response_model_ids')}</select></label>
+      <label style="flex:1"><span class="hint">Stubs</span><select id="elementStubs" multiple style="min-height:90px;width:100%">${stubOptions}</select></label>
+    </div>
+    <textarea id="elementPre" class="composer" placeholder="前置条件，一行一个">${esc(element ? (element.preconditions || []).join('\n') : '')}</textarea>
+    <textarea id="elementPost" class="composer" placeholder="后置条件，一行一个">${esc(element ? (element.postconditions || []).join('\n') : '')}</textarea>
+    <textarea id="elementMain" class="composer" placeholder="主流程，一行一步">${esc(element ? (element.main_flow || []).join('\n') : '')}</textarea>
+    <textarea id="elementAlt" class="composer" placeholder="扩展/异常场景，一行一个">${esc(element ? (element.alternatives || []).join('\n') : '')}</textarea>`
+}
+
+function syncModelKindOptions(selectedKind) {
+  const type = document.getElementById('elementModelType').value
+  const kindSelect = document.getElementById('elementKind')
+  const options = type === 'persistence' ? ELEMENT_KIND_OPTIONS.model : ['dto']
+  kindSelect.innerHTML = options.map(option => `<option value="${option}">${option}</option>`).join('')
+  kindSelect.value = options.includes(selectedKind) ? selectedKind : options[0]
+  kindSelect.disabled = type !== 'persistence'
+}
+
+function openElementModal(kind, element) {
+  editingElement = { kind, element }
+  document.getElementById('elementModalTitle').textContent = `${element ? '编辑' : '新建'} ${ELEMENT_LABELS[kind]}`
+  document.getElementById('elementName').value = element ? element.name : ''
+  document.getElementById('elementDescription').value = element ? (element.description || '') : ''
+  const kindSelect = document.getElementById('elementKind')
+  kindSelect.disabled = false
+  document.getElementById('elementExtra').innerHTML = elementExtraHtml(kind, element)
+  if (kind === 'model') {
+    syncModelKindOptions(element ? element.kind : null)
+    document.getElementById('elementModelType').onchange = () => syncModelKindOptions(null)
+  } else {
+    kindSelect.innerHTML = ELEMENT_KIND_OPTIONS[kind].map(option => `<option value="${option}">${option}</option>`).join('')
+    kindSelect.value = element ? element.kind : ELEMENT_KIND_OPTIONS[kind][0]
+  }
+  document.getElementById('elementSaveStatus').textContent = ''
+  document.getElementById('elementModal').style.display = 'flex'
+  setTimeout(() => document.getElementById('elementName').focus(), 0)
+}
+
+function closeElementModal() {
+  document.getElementById('elementModal').style.display = 'none'
+  editingElement = null
+}
+
+const linesOf = id => (document.getElementById(id) || {}).value?.split('\n').map(line => line.trim()).filter(Boolean) || []
+const jsonOf = (id, fallback) => {
+  const raw = (document.getElementById(id) || {}).value?.trim()
+  if (!raw) return fallback
+  try { return JSON.parse(raw) } catch { throw new Error(`${id} 不是合法 JSON`) }
+}
+
+async function saveElementFromModal() {
+  if (!editingElement) return
+  const kind = editingElement.kind
+  const element = editingElement.element
+  const status = document.getElementById('elementSaveStatus')
+  const button = document.getElementById('elementSaveBtn')
+  try {
+    const payload = {
+      ...(element ? { id: element.id } : {}),
+      name: document.getElementById('elementName').value.trim(),
+      kind: document.getElementById('elementKind').value,
+      description: document.getElementById('elementDescription').value.trim(),
+    }
+    if (!payload.name) throw new Error('名称不能为空')
+    if (kind === 'model') {
+      payload.type = document.getElementById('elementModelType').value
+      payload.attributes = jsonOf('elementAttributes', [])
+      payload.invariants = linesOf('elementInvariants')
+      payload.relations = jsonOf('elementRelations', [])
+    } else if (kind === 'stub') {
+      payload.operations = jsonOf('elementOperations', [])
+    } else {
+      payload.actors = (document.getElementById('elementActors') || {}).value?.split(',').map(item => item.trim()).filter(Boolean) || []
+      payload.request_model_ids = [...(document.getElementById('elementRequestModels') || {}).selectedOptions || []].map(option => option.value)
+      payload.response_model_ids = [...(document.getElementById('elementResponseModels') || {}).selectedOptions || []].map(option => option.value)
+      payload.stub_ids = [...(document.getElementById('elementStubs') || {}).selectedOptions || []].map(option => option.value)
+      payload.preconditions = linesOf('elementPre')
+      payload.postconditions = linesOf('elementPost')
+      payload.main_flow = linesOf('elementMain')
+      payload.alternatives = linesOf('elementAlt')
+    }
+    button.disabled = true
+    status.textContent = '保存中…'
+    await post(`api/domains/${currentDomainId}/upsert`, { kind, element: payload })
+    closeElementModal()
+    renderedDomainSignature = ''
+    await openDomain(currentDomainId, { tab: `${kind}s` })
+  } catch (error) {
+    status.textContent = `保存失败：${error.message}`
+  } finally {
+    button.disabled = false
+  }
+}
+
+function domainSessionHtml(detail) {
+  const tabs = [['all', '全部'], ['chat', '对话'], ['dsh', 'dsh 轨迹']]
+  return `
+    <div class="session-tabs" id="domainSessionTabs">
+      ${tabs.map(([key, label]) => `<button data-domain-session-tab="${key}" class="${domainSessionTab === key ? 'active' : ''}">${label}</button>`).join('')}
+    </div>
+    <div id="domainMessages"></div>
+    <div id="domainTyping" class="typing" style="display:none"><span></span><span></span><span></span><i>领域 agent 执行中…</i></div>
+    <div id="domainQuestionCard" style="display:none;margin:8px 0;padding:8px;border:1px solid var(--line);border-radius:8px">
+      <h2 style="margin:0 0 6px">待回答问题</h2>
+      <div id="domainQuestionList"></div>
+    </div>
+    <textarea id="domainInput" class="composer" placeholder="与领域 agent 对话：让它增量生成 Models / Stubs / Interacts；Enter 发送，Shift+Enter 换行"></textarea>
+    <div class="row" style="margin-top:8px"><button class="primary" id="domainSendBtn">提交输入</button></div>
+    <div class="hint">领域记忆会注入领域会话的 brief，并落在 ${esc(detail.memory.file || '领域工作区')}。</div>`
+}
+
+function bindDomainSession(saved = {}) {
+  const box = document.getElementById('domainMessages')
+  if (box) {
+    const archive = currentDomain.archive && currentDomain.archive.length ? currentDomain.archive : (currentDomain.messages || [])
+    const list = archive.filter(entry => {
+      if (domainSessionTab === 'chat') return entry.type === 'message'
+      if (domainSessionTab === 'dsh') return entry.type !== 'message' || entry.source === 'dsh'
+      return true
+    })
+    box.innerHTML = list.length ? list.map(entry => projectArchiveHtml(entry)).join('') : '<div class="empty">当前 tab 还没有内容</div>'
+    box.scrollTop = saved.scroll || box.scrollHeight
+  }
+  document.querySelectorAll('#domainSessionTabs [data-domain-session-tab]').forEach(button => {
+    button.onclick = () => {
+      domainSessionTab = button.dataset.domainSessionTab
+      renderedDomainSignature = ''
+      renderDomain(currentDomain)
+    }
+  })
+  const input = document.getElementById('domainInput')
+  if (input) {
+    input.value = saved.input || ''
+    input.dataset.min = '78'
+    input.addEventListener('input', () => autosize(input))
+    input.addEventListener('keydown', event => {
+      if (event.key === 'Enter' && !event.shiftKey) {
+        event.preventDefault()
+        sendDomainChat()
+      }
+    })
+    autosize(input)
+  }
+  const button = document.getElementById('domainSendBtn')
+  if (button) button.onclick = sendDomainChat
+  renderDomainStatus(currentDomain)
+  renderDomainQuestions(currentDomain)
+}
+
+async function sendDomainChat() {
+  const input = document.getElementById('domainInput')
+  const text = input ? input.value.trim() : ''
+  if (!text || !currentDomainId) return
+  try {
+    await post(`api/domains/${currentDomainId}/chat`, { text })
+    input.value = ''
+    autosize(input)
+  } catch (error) {
+    window.alert(`发送失败：${error.message}`)
+  }
+  renderedDomainSignature = ''
+  await openDomain(currentDomainId, { tab: 'session' })
+}
+
+/** 领域会话里的 ask_user_question：按 domain id 回传答案。 */
+function renderDomainQuestions(detail) {
+  const open = (detail.questions || []).filter(question => question.status === 'open')
+  const card = document.getElementById('domainQuestionCard')
+  if (!card) return
+  card.style.display = open.length ? '' : 'none'
+  const list = document.getElementById('domainQuestionList')
+  list.innerHTML = open.map(record => `
+    <div class="ticket-item" data-domain-question-box="${esc(record.id)}">
+      <div><strong>${esc(record.session_id || 'dsh agent')}</strong><span class="hint">${esc(record.id)}</span></div>
+      ${(record.questions || []).map(question => `
+        <div style="margin-top:8px">
+          ${question.header ? `<div class="hint" style="margin:0">${esc(question.header)}</div>` : ''}
+          <div style="white-space:pre-wrap">${esc(question.question)}</div>
+          ${question.detail ? `<pre style="max-height:160px">${esc(question.detail)}</pre>` : ''}
+          ${(question.options || []).map(option => `
+            <label style="display:block;margin-top:4px">
+              <input type="${question.multiSelect ? 'checkbox' : 'radio'}" name="${esc(record.id)}-${esc(question.id)}" value="${esc(option.label)}" data-dqid="${esc(question.id)}">
+              ${esc(option.label)}
+              ${option.description ? `<span class="hint">${esc(option.description)}</span>` : ''}
+            </label>`).join('')}
+          <textarea class="composer" data-dqcustom="${esc(question.id)}" placeholder="自定义回答（选项之外）"></textarea>
+        </div>`).join('')}
+      <div class="row" style="margin-top:6px">
+        <button class="primary" data-domain-question-answer="${esc(record.id)}">提交回答</button>
+        <button data-domain-question-cancel="${esc(record.id)}">取消问题</button>
+      </div>
+    </div>`).join('')
+  list.querySelectorAll('[data-domain-question-cancel]').forEach(button => {
+    button.onclick = async () => {
+      try {
+        await post(`api/questions/${button.dataset.domainQuestionCancel}/cancel`, { matrix_id: detail.id, reason: '用户已在领域面板取消该问题' })
+        renderedDomainSignature = ''
+        await openDomain(detail.id)
+      } catch (error) {
+        window.alert(`取消失败：${error.message}`)
+      }
+    }
+  })
+  list.querySelectorAll('[data-domain-question-answer]').forEach(button => {
+    button.onclick = async () => {
+      const id = button.dataset.domainQuestionAnswer
+      const record = open.find(item => item.id === id)
+      if (!record) return
+      const box = list.querySelector(`[data-domain-question-box="${id}"]`)
+      const answers = (record.questions || []).map(question => {
+        const selected = [...box.querySelectorAll(`input[data-dqid="${question.id}"]:checked`)].map(input => input.value)
+        const customInput = box.querySelector(`[data-dqcustom="${question.id}"]`)
+        const custom = customInput ? customInput.value.trim() : ''
+        return { id: question.id, selected, ...(custom ? { custom } : {}) }
+      })
+      try {
+        await post(`api/questions/${id}/answer`, { matrix_id: detail.id, answers })
+        renderedDomainSignature = ''
+        await openDomain(detail.id)
+      } catch (error) {
+        window.alert(`回答失败：${error.message}`)
+      }
+    }
+  })
+}
+
+function domainMemoryHtml(detail) {
+  const entries = detail.memory.entries || []
+  return `
+    <div class="hint">更新于 ${esc(detail.memory.updated_at)} · ${esc(detail.memory.file || '（领域 cwd 未设置）')}</div>
+    ${entries.length ? entries.map(entry => `
+      <div class="mem-item">
+        <div class="meta"><span>${esc(entry.id)} · ${esc(entry.updated_at || entry.created_at)}</span>
+          <button data-domain-mem-remove="${esc(entry.id)}">删除</button></div>
+        ${esc(entry.text)}
+        ${entry.tags && entry.tags.length ? `<div class="hint">标签：${esc(entry.tags.join('、'))}</div>` : ''}
+      </div>`).join('') : '<div class="empty">暂无领域记忆</div>'}
+    <textarea id="domainMemoryText" class="composer" placeholder="写入一条领域记忆（术语、约束、关键决策…）"></textarea>
+    <div class="row" style="margin-top:8px">
+      <button class="primary" id="domainMemoryAddBtn">添加记忆</button>
+      <span class="hint" id="domainMemoryHint"></span>
+    </div>`
+}
+
+function bindDomainMemory(saved = {}) {
+  const input = document.getElementById('domainMemoryText')
+  if (input) {
+    input.value = saved.memory || ''
+    input.addEventListener('input', () => autosize(input))
+    autosize(input)
+  }
+  const add = document.getElementById('domainMemoryAddBtn')
+  if (add) {
+    add.onclick = async () => {
+      const text = document.getElementById('domainMemoryText').value.trim()
+      if (!text) return
+      add.disabled = true
+      try {
+        await post(`api/domains/${currentDomainId}/memory`, { action: 'add', text })
+        renderedDomainSignature = ''
+        await openDomain(currentDomainId, { tab: 'memory' })
+      } catch (error) {
+        document.getElementById('domainMemoryHint').textContent = `添加失败：${error.message}`
+      } finally {
+        add.disabled = false
+      }
+    }
+  }
+  document.querySelectorAll('#domainTabBody [data-domain-mem-remove]').forEach(button => {
+    button.onclick = async () => {
+      try {
+        await post(`api/domains/${currentDomainId}/memory`, { action: 'remove', entry_id: button.dataset.domainMemRemove })
+        renderedDomainSignature = ''
+        await openDomain(currentDomainId, { tab: 'memory' })
+      } catch (error) {
+        document.getElementById('domainMemoryHint').textContent = `删除失败：${error.message}`
+      }
+    }
+  })
+}
+
+async function refresh() {
+  await loadProjects().catch(() => {})
+  if (viewMode === 'domain' && currentDomainId) {
+    renderedDomainSignature = ''
+    const detail = await api(`api/domains/${currentDomainId}`)
+    renderDomain(detail)
+    return
+  }
+  if (viewMode === 'project' && currentProjectId) {
+    renderedProjectSignature = ''
+    const detail = await api(`api/projects/${currentProjectId}`)
+    renderProject(detail)
+    return
+  }
+  await loadTree()
+  if (currentId && !draftMode) await select(currentId)
+}
+
+/** 输入框随内容增高，长需求不再被压成一条细线。 */
+function autosize(el) {
+  if (!el) return
+  const min = Number(el.dataset.min || 78)
+  el.style.height = 'auto'
+  el.style.height = `${Math.min(Math.max(el.scrollHeight, min), 460)}px`
+}
+
+async function createFromDraft() {
+  const el = document.getElementById('draftText')
+  const text = el.value.trim()
+  const status = document.getElementById('draftStatus')
+  if (!text) {
+    status.textContent = '请输入需求'
+    return
+  }
+  const button = document.getElementById('createBtn')
+  button.disabled = true
+  status.textContent = '正在受理并创建 matrix…'
+  try {
+    const detail = await post('api/matrix', { task: text, ...(draftProjectId ? { project_id: draftProjectId } : {}) })
+    el.value = ''
+    status.textContent = ''
+    setDraftMode(false)
+    await loadTree()
+    await select(detail.id)
+    // 第一条消息触发后续：信息足够时让绑定 agent 直接生成骨架 DAG
+    if (detail.state === 'awaiting_requirement') {
+      post(`api/matrix/${detail.id}/kickoff`, {}).catch(() => {})
+    }
+  } catch (error) {
+    status.textContent = `创建失败：${error.message}`
+  } finally {
+    button.disabled = false
+  }
+}
+
+async function sendChat() {
+  const el = document.getElementById('inputText')
+  const text = el.value.trim()
+  if (!text || !currentId) return
+  try {
+    await post(`api/matrix/${currentId}/chat`, { text })
+    el.value = ''
+    autosize(el)
+  } catch (error) {
+    document.getElementById('routingHint').textContent = `发送失败：${error.message}`
+  }
+  await refresh()
+}
+
+/** 根入口契约：兼容 schema 对象与旧的字符串描述。 */
+function inputSchemaOf(detail) {
+  const raw = detail && detail.skeleton && detail.skeleton.entry ? detail.skeleton.entry.inputs : null
+  return raw && typeof raw === 'object' && !Array.isArray(raw) ? raw : null
+}
+
+function inputFieldsOf(detail) {
+  const schema = inputSchemaOf(detail)
+  return schema ? Object.keys(schema) : []
+}
+
+function requiredInputFieldsOf(detail) {
+  const schema = inputSchemaOf(detail)
+  if (!schema) return []
+  return Object.keys(schema).filter(key => schema[key] && typeof schema[key] === 'object' && schema[key].required === true)
+}
+
+function sampleInputValue(spec) {
+  if (spec && typeof spec === 'object' && !Array.isArray(spec)) {
+    if (Object.prototype.hasOwnProperty.call(spec, 'default')) return spec.default
+    if (spec.type === 'number' || spec.type === 'integer') return 41
+    if (spec.type === 'boolean') return true
+    if (spec.type === 'array') return []
+    if (spec.type === 'object' || spec.type === 'json') return {}
+    return 'value'
+  }
+  const text = String(spec ?? '')
+  if (/number|integer/i.test(text)) return 41
+  if (/boolean/i.test(text)) return true
+  if (/array/i.test(text)) return []
+  if (/object|json/i.test(text)) return {}
+  return 'value'
+}
+
+function sampleInputOf(detail) {
+  const schema = inputSchemaOf(detail)
+  if (!schema) return ''
+  const sample = {}
+  for (const [key, spec] of Object.entries(schema)) sample[key] = sampleInputValue(spec)
+  return Object.keys(sample).length ? JSON.stringify(sample) : ''
+}
+
+/** 运行前收集入口 Cin；返回 POST body，null 表示用户取消。 */
+function promptRunInput(detail) {
+  const raw = prompt('入口 Cin（JSON 对象，可留空）', sampleInputOf(detail))
+  if (raw === null) return null
+  let input
+  if (raw.trim()) {
+    try {
+      input = JSON.parse(raw)
+    } catch {
+      throw new Error('入口 Cin 不是合法 JSON')
+    }
+  }
+  const fields = inputFieldsOf(detail)
+  // 单字段入口允许直接输入标量，自动包装成 {字段: 值}
+  if (input !== undefined && (input === null || typeof input !== 'object' || Array.isArray(input))) {
+    if (fields.length === 1) input = { [fields[0]]: input }
+    else throw new Error(`入口 Cin 必须是 JSON 对象，例如 ${sampleInputOf(detail) || '{"字段": 值}'}`)
+  }
+  const body = input === undefined ? {} : { input }
+  const missing = requiredInputFieldsOf(detail)
+    .filter(key => !body.input || !Object.prototype.hasOwnProperty.call(body.input, key))
+  if (missing.length) throw new Error(`入口 Cin 缺少必填字段：${missing.join('、')}`)
+  return body
+}
+
+/** 项目视图里直接运行某个根 matrix（先拉取 detail 再收集入口 Cin）。 */
+async function runMatrixById(id) {
+  const detail = await api(`api/matrix/${id}`)
+  const body = promptRunInput(detail)
+  if (body === null) return
+  await post(`api/matrix/${id}/run`, body)
+  renderedProjectSignature = ''
+  await openProject(currentProjectId)
+}
+
+async function doAction(action) {
+  if (!currentId) return
+  const hint = document.getElementById('routingHint')
+  const buttons = [...document.querySelectorAll('#actions [data-action]')]
+  buttons.forEach(button => { button.disabled = true })
+  const showHint = text => { if (hint) hint.textContent = text || '' }
+  try {
+    if (action === 'run') {
+      const body = promptRunInput(currentDetail)
+      if (body === null) return // 用户取消，不触发运行
+      showHint('运行中…')
+      await post(`api/matrix/${currentId}/run`, body)
+    } else {
+      showHint('执行中…')
+      await post(`api/matrix/${currentId}/${action}`, action === 'prebuild' ? { background: true } : {})
+    }
+    showHint('')
+    await refresh()
+  } catch (error) {
+    showHint(`操作失败：${error && error.message ? error.message : error}`)
+  } finally {
+    buttons.forEach(button => { button.disabled = false })
+  }
+}
+
+function closeRunModal() {
+  document.getElementById('runModal').style.display = 'none'
+}
+
+/** 渲染 dsh agent 的 ask_user_question：提交后回传给仍在等待的 agent。 */
+function renderQuestions(rows, matrixId) {
+  const open = (rows || []).filter(question => question.status === 'open')
+  const card = document.getElementById('questionCard')
+  if (!card) return
+  card.style.display = open.length ? '' : 'none'
+  const list = document.getElementById('questionList')
+  list.innerHTML = open.map(record => `
+    <div class="ticket-item" data-question-box="${esc(record.id)}">
+      <div><strong>${esc(record.session_id || 'dsh agent')}</strong>
+        <span class="hint">${esc(record.id)}</span></div>
+      ${(record.questions || []).map(question => `
+        <div style="margin-top:8px">
+          ${question.header ? `<div class="hint" style="margin:0">${esc(question.header)}</div>` : ''}
+          <div style="white-space:pre-wrap">${esc(question.question)}</div>
+          ${question.detail ? `<pre style="max-height:160px">${esc(question.detail)}</pre>` : ''}
+          ${(question.options || []).map(option => `
+            <label style="display:block;margin-top:4px">
+              <input type="${question.multiSelect ? 'checkbox' : 'radio'}" name="${esc(record.id)}-${esc(question.id)}" value="${esc(option.label)}" data-qid="${esc(question.id)}">
+              ${esc(option.label)}
+              ${option.description ? `<span class="hint">${esc(option.description)}</span>` : ''}
+            </label>`).join('')}
+          <textarea class="composer" data-qcustom="${esc(question.id)}" placeholder="自定义回答（选项之外）"></textarea>
+        </div>`).join('')}
+      <div class="row" style="margin-top:6px">
+        <button class="primary" data-question-answer="${esc(record.id)}">提交回答</button>
+        <button data-question-cancel="${esc(record.id)}">取消问题</button>
+      </div>
+    </div>`).join('')
+  list.querySelectorAll('[data-question-cancel]').forEach(button => {
+    button.onclick = async () => {
+      try {
+        await post(`api/questions/${button.dataset.questionCancel}/cancel`, {
+          matrix_id: matrixId, reason: '用户已在面板取消该问题',
+        })
+        await refresh()
+      } catch (error) {
+        document.getElementById('routingHint').textContent = `取消失败：${error.message}`
+      }
+    }
+  })
+  list.querySelectorAll('[data-question-answer]').forEach(button => {
+    button.onclick = async () => {
+      const id = button.dataset.questionAnswer
+      const record = open.find(item => item.id === id)
+      if (!record) return
+      const box = list.querySelector(`[data-question-box="${id}"]`)
+      const answers = (record.questions || []).map(question => {
+        const selected = [...box.querySelectorAll(`input[data-qid="${question.id}"]:checked`)].map(input => input.value)
+        const customInput = box.querySelector(`[data-qcustom="${question.id}"]`)
+        const custom = customInput ? customInput.value.trim() : ''
+        return { id: question.id, selected, ...(custom ? { custom } : {}) }
+      })
+      try {
+        await post(`api/questions/${id}/answer`, { matrix_id: matrixId, answers })
+        await refresh()
+      } catch (error) {
+        document.getElementById('routingHint').textContent = `回答失败：${error.message}`
+      }
+    }
+  })
+}
+
+/** 渲染 matrix 内的待处理工单：答复会恢复对应 run。 */
+function renderTickets(rows, matrixId) {
+  const open = (rows || []).filter(ticket => ticket.status === 'open')
+  const card = document.getElementById('ticketCard')
+  card.style.display = open.length ? '' : 'none'
+  document.getElementById('ticketList').innerHTML = open.map(ticket => `
+    <div class="ticket-item">
+      <div><strong>${esc(ticket.node_id || ticket.path || '人工节点')}</strong>
+        <span class="hint">${esc(ticket.run_id || '')} · ${esc(ticket.id)}</span></div>
+      <div style="white-space:pre-wrap;margin-top:4px">${esc(ticket.prompt || '等待人工输入')}</div>
+      ${ticket.input !== undefined ? `<pre style="max-height:160px">${esc(JSON.stringify(ticket.input, null, 2))}</pre>` : ''}
+      <textarea class="composer" id="ticket-answer-${esc(ticket.id)}" placeholder="填写答复；Enter 提交，Shift+Enter 换行"></textarea>
+      <div class="row" style="margin-top:6px">
+        <button class="primary" data-ticket-answer="${esc(ticket.id)}">答复并继续</button>
+        <button data-ticket-cancel="${esc(ticket.id)}">取消工单</button>
+      </div>
+    </div>`).join('')
+  document.querySelectorAll('[data-ticket-answer]').forEach(button => {
+    button.onclick = async () => {
+      const id = button.dataset.ticketAnswer
+      const answer = document.getElementById(`ticket-answer-${id}`).value
+      try {
+        await post(`api/tickets/${id}/answer`, { matrix_id: matrixId, answer })
+        await refresh()
+      } catch (error) {
+        document.getElementById('routingHint').textContent = `答复失败：${error.message}`
+      }
+    }
+  })
+  document.querySelectorAll('[data-ticket-cancel]').forEach(button => {
+    button.onclick = async () => {
+      try {
+        await post(`api/tickets/${button.dataset.ticketCancel}/cancel`, { matrix_id: matrixId })
+        await refresh()
+      } catch (error) {
+        document.getElementById('routingHint').textContent = `取消失败：${error.message}`
+      }
+    }
+  })
+}
+
+/** 运行详情：轨迹 + run.log + 产物文件浏览器。 */
+async function showRun(runId) {
+  const run = await api(`api/runs/${runId}`)
+  const artifacts = await api(`api/runs/${runId}/artifacts`).catch(() => ({ files: [], log: '' }))
+  document.getElementById('runModal').style.display = 'flex'
+  document.getElementById('runModalTitle').textContent = `${run.id} · ${run.status}`
+  document.getElementById('runModalSummary').textContent = [
+    run.error ? `错误：${run.error.path || run.error.node_id || ''} ${run.error.message || ''}` : '',
+    run.output !== null && run.output !== undefined ? `输出：${JSON.stringify(run.output)}` : '',
+    `产物目录：${artifacts.dir || '（无）'}`,
+  ].filter(Boolean).join('\n')
+  const trace = (run.trace || []).map(step => `
+    <div class="tree-node">${esc(step.path)} ${badge(step.status || '')}<span class="hint">${esc(step.kind || '')}</span></div>`).join('')
+  const files = (artifacts.files || []).map(file => `
+    <div class="artifact-file" data-artifact="${esc(file.path)}">${esc(file.path)} <span class="hint">${file.size} B</span></div>`).join('')
+  document.getElementById('runModalBody').innerHTML = `
+    <h2 class="hint">轨迹</h2>${trace || '<div class="empty">无轨迹</div>'}
+    <h2 class="hint" style="margin-top:10px">运行日志</h2>
+    <pre id="runArtifactPreview" style="max-height:240px">${esc(artifacts.log || '（暂无日志）')}</pre>
+    <h2 class="hint" style="margin-top:10px">产物文件</h2>
+    <div class="artifact-list">${files || '<div class="empty">无产物</div>'}</div>`
+  document.querySelectorAll('#runModalBody [data-artifact]').forEach(item => item.onclick = async () => {
+    try {
+      const file = await api(`api/runs/${runId}/artifacts?path=${encodeURIComponent(item.dataset.artifact)}`)
+      document.getElementById('runArtifactPreview').textContent = file.content
+    } catch (error) {
+      document.getElementById('runArtifactPreview').textContent = `读取失败：${error.message}`
+    }
+  })
+}
+
+function closeRewind() {
+  document.getElementById('rewindModal').style.display = 'none'
+}
+
+/** 列出已完成轮次；选择后从该轮分叉，面板时间线回退到该轮。 */
+async function openRewind() {
+  if (!currentId) return
+  try {
+    const data = await api(`api/matrix/${currentId}/rewind-points`)
+    const points = data.points || []
+    const running = Boolean(data.running)
+    document.getElementById('rewindList').innerHTML = [
+      running ? '<div class="hint" style="color:#f0a35e">当前会话仍在执行，请等待本轮回复结束后再撤回。</div>' : '',
+      points.length ? points.map(point => `
+        <div class="ticket-item">
+          <div><strong>第 ${esc(point.turn)} 轮</strong><span class="hint">seq ${esc(point.at_seq)} · ${esc(point.at)}</span></div>
+          <div style="white-space:pre-wrap;margin-top:4px">用户：${esc(point.user_text || '（无文本）')}</div>
+          <div class="hint">回复：${esc(point.assistant_text || '（无文本）')}</div>
+          <div class="row" style="margin-top:6px">
+            <button class="primary" data-rewind-seq="${esc(point.at_seq)}" ${running ? 'disabled' : ''}>从这里重新推进</button>
+          </div>
+        </div>`).join('')
+        : '<div class="empty">还没有可撤回的已完成轮次</div>',
+    ].join('')
+    document.getElementById('rewindModal').style.display = 'flex'
+    document.querySelectorAll('[data-rewind-seq]').forEach(button => {
+      button.onclick = async () => {
+        if (!window.confirm('撤回后当前对话会分叉到新会话，确定继续？')) return
+        try {
+          await post(`api/matrix/${currentId}/rewind`, { at_seq: Number(button.dataset.rewindSeq) })
+          closeRewind()
+          await refresh()
+        } catch (error) {
+          window.alert(`撤回失败：${error.message}`)
+        }
+      }
+    })
+  } catch (error) {
+    window.alert(`读取撤回点失败：${error.message}`)
+  }
+}
+
+document.getElementById('rewindBtn').onclick = openRewind
+document.querySelectorAll('[data-session-tab]').forEach(button => {
+  button.onclick = () => {
+    sessionTab = button.dataset.sessionTab
+    document.querySelectorAll('[data-session-tab]').forEach(item => item.classList.toggle('active', item === button))
+    if (currentDetail) renderMessages(currentDetail, true)
+  }
+})
+document.getElementById('messages').addEventListener('click', async event => {
+  const button = event.target.closest('[data-rewind-seq]')
+  if (!button || button.disabled || !currentId) return
+  const atSeq = Number(button.dataset.rewindSeq)
+  if (!Number.isInteger(atSeq)) return
+  if (!window.confirm('撤回这条消息及之后的内容，并从它的上一轮重新推进？')) return
+  try {
+    await post(`api/matrix/${currentId}/rewind`, { at_seq: atSeq })
+    await refresh()
+  } catch (error) {
+    document.getElementById('routingHint').textContent = `撤回失败：${error.message}`
+  }
+})
+document.getElementById('rewindClose').onclick = closeRewind
+document.getElementById('rewindModal').onclick = event => { if (event.target.id === 'rewindModal') closeRewind() }
+document.getElementById('runModalClose').onclick = closeRunModal
+document.getElementById('runModal').onclick = event => { if (event.target.id === 'runModal') closeRunModal() }
+document.getElementById('nodeModalClose').onclick = closeNodeModal
+document.getElementById('nodeModal').onclick = event => { if (event.target.id === 'nodeModal') closeNodeModal() }
+document.getElementById('nodeModalRawBtn').onclick = toggleNodeRaw
+document.getElementById('nodeModalCopy').onclick = copyNodeJson
+document.getElementById('newMatrixBtn').onclick = startDraft
+document.getElementById('newProjectBtn').onclick = openProjectModal
+document.getElementById('projectModalClose').onclick = closeProjectModal
+document.getElementById('projectModal').onclick = event => { if (event.target.id === 'projectModal') closeProjectModal() }
+document.getElementById('projectCreateBtn').onclick = saveProjectFromModal
+document.getElementById('domainModalClose').onclick = closeDomainModal
+document.getElementById('domainModal').onclick = event => { if (event.target.id === 'domainModal') closeDomainModal() }
+document.getElementById('domainSaveBtn').onclick = saveDomainFromModal
+document.getElementById('domainName').addEventListener('keydown', event => {
+  if (event.key === 'Enter') {
+    event.preventDefault()
+    saveDomainFromModal()
+  }
+})
+document.getElementById('elementModalClose').onclick = closeElementModal
+document.getElementById('elementModal').onclick = event => { if (event.target.id === 'elementModal') closeElementModal() }
+document.getElementById('elementSaveBtn').onclick = saveElementFromModal
+document.getElementById('moveModalClose').onclick = closeMoveModal
+document.getElementById('moveModal').onclick = event => { if (event.target.id === 'moveModal') closeMoveModal() }
+document.getElementById('moveConfirmBtn').onclick = confirmMove
+document.getElementById('projectName').addEventListener('keydown', event => {
+  if (event.key === 'Enter') {
+    event.preventDefault()
+    saveProjectFromModal()
+  }
+})
+document.getElementById('createBtn').onclick = createFromDraft
+document.getElementById('cancelDraftBtn').onclick = cancelDraft
+document.getElementById('refreshBtn').onclick = refresh
+document.getElementById('sendBtn').onclick = sendChat
+
+const draftText = document.getElementById('draftText')
+const inputText = document.getElementById('inputText')
+draftText.dataset.min = '190'
+draftText.addEventListener('input', () => autosize(draftText))
+draftText.addEventListener('keydown', event => {
+  if (event.key === 'Enter' && !event.shiftKey) {
+    event.preventDefault()
+    createFromDraft()
+  }
+})
+inputText.addEventListener('input', () => autosize(inputText))
+inputText.addEventListener('keydown', event => {
+  if (event.key === 'Enter' && !event.shiftKey) {
+    event.preventDefault()
+    sendChat()
+  }
+})
+autosize(inputText)
+
+async function boot() {
+  await loadProjects().catch(error => {
+    document.getElementById('projects').textContent = `加载失败：${error.message}`
+  })
+  const focus = location.hash.replace('#', '')
+  if (focus.startsWith('p/')) {
+    await openProject(focus.slice(2)).catch(() => projectsData.length && openProject(projectsData[0].id))
+    return
+  }
+  if (focus.startsWith('d/')) {
+    await openDomain(focus.slice(2)).catch(() => projectsData.length && openProject(projectsData[0].id))
+    return
+  }
+  if (focus && /^mx_/.test(focus)) {
+    await select(focus).catch(() => projectsData.length && openProject(projectsData[0].id))
+    return
+  }
+  if (projectsData.length) {
+    // 启动时不自动打开项目，避免把某个项目误标成「最近使用」
+    const view = document.getElementById('projectView')
+    view.style.display = ''
+    view.innerHTML = '<div class="card"><h2>项目</h2><div class="empty">点击左侧项目卡片上的「打开项目」进入项目视图。</div></div>'
+    document.getElementById('domainView').style.display = 'none'
+    document.getElementById('matrixView').style.display = 'none'
+    document.body.classList.add('project-mode')
+    return
+  }
+  openProjectModal()
+}
+
+boot().catch(error => { document.getElementById('projects').textContent = `加载失败：${error.message}` })
+// 轮询只拉数据；用户正在选择文本或输入时先挂起，等交互结束再一次性应用。
+setInterval(async () => {
+  if (draftMode) return
+  if (viewMode === 'domain') {
+    if (!currentDomainId) return
+    try {
+      const detail = await api(`api/domains/${currentDomainId}`)
+      if (shouldDeferRender()) {
+        domainPending = detail
+        renderDomainStatus(detail)
+        return
+      }
+      renderDomain(detail)
+    } catch {}
+    return
+  }
+  if (viewMode === 'project') {
+    if (!currentProjectId) return
+    try {
+      const detail = await api(`api/projects/${currentProjectId}`)
+      if (shouldDeferRender()) {
+        projectPending = detail
+        renderProjectStatus(detail)
+        return
+      }
+      renderProject(detail)
+    } catch {}
+    return
+  }
+  if (!currentId) return
+  try {
+    const detail = await api(`api/matrix/${currentId}`)
+    if (shouldDeferRender()) {
+      pendingDetail = detail
+      // 输入/选择期间不做整块重绘，但执行状态要实时更新
+      renderAgentStatus(detail)
+      return
+    }
+    renderDetail(detail)
+  } catch {}
+}, 2000)
+</script>
+</body>
+</html>

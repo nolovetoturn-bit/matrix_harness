@@ -1,0 +1,34 @@
+# 依赖目录（含 mcp/ 与 deepseek-harness/ 下的所有 node_modules）
+node_modules/
+.tmp/
+
+# 日志与临时产物
+*.log
+*.tsbuildinfo
+
+# Python 缓存
+__pycache__/
+*.pyc
+
+# 环境变量与密钥（保留示例模板）
+.env
+.env.*
+!.env.example
+!.env.*.example
+
+# 本地运行时密钥与会话数据
+wechatauto_keys/
+wechatauto_logs/
+
+# IDE / 编辑器
+.idea/
+.vscode/
+.trae/
+
+# 系统文件
+Thumbs.db
+.DS_Store
+
+# 注意：deepseek-harness/ 已并入本仓库（其 .git 已移除）。
+# 它自带的 .gitignore 仍然生效（node_modules/、.cache/、/dist/、apps/web/dist/、.dsh-build/ 等），
+# 因此这些构建产物不会被提交。

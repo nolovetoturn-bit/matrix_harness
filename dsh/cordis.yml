@@ -1,0 +1,33 @@
+# 项目级 dsh 覆盖层：登记本项目插件的 dsh 适配器。
+#
+# 用法（cwd 必须是 deepseek-harness/）：
+#   pnpm dsh --profile web --patch "C:/Users/admin/Documents/trae_projects/rms_dsh/dsh/cordis.yml" --dump-config
+#   "" | pnpm dsh acp --patch "C:/Users/admin/Documents/trae_projects/rms_dsh/dsh/cordis.yml"
+#
+# 约定（见 docs/dsh-plugin-spec.md §5）：
+#   - name 必须是绝对 file:/// 路径，且指向插件的 dsh/host.mjs；
+#   - 每个插件只在这里登记一次，插件目录内不放 cordis.yml；
+#   - 新增插件后同步补充 insert 行。
+#   - 例外：rms-flow-runner-v2 登记在 web profile 的 cordis.patch.yml（启动 dsh 即自动加载，
+#     面板常驻 /flow-runner-v2/），此处不再重复登记，避免同一插件出现两份登记源。
+#   - 旧版 rms-flow-runner 已停止 dsh 常驻，不再在两处登记。
+
+- insert:
+    - id: rms-dsh-starter
+      name: 'file:///C:/Users/admin/Documents/trae_projects/rms_dsh/plugins/generic/rms-dsh-starter/dsh/host.mjs'
+    - id: rms-dsh-starter-service
+      name: 'file:///C:/Users/admin/Documents/trae_projects/rms_dsh/plugins/generic/rms-dsh-starter/dsh/service.mjs'
+    - id: rms-dsh-devkit
+      name: 'file:///C:/Users/admin/Documents/trae_projects/rms_dsh/plugins/generic/rms-dsh-devkit/dsh/host.mjs'
+    - id: rms-image-diff
+      name: 'file:///C:/Users/admin/Documents/trae_projects/rms_dsh/plugins/generic/rms-image-diff/dsh/host.mjs'
+    - id: rms-wechat-session
+      name: 'file:///C:/Users/admin/Documents/trae_projects/rms_dsh/plugins/generic/rms-wechat-session/dsh/host.mjs'
+    - id: rms-dingtalk-session
+      name: 'file:///C:/Users/admin/Documents/trae_projects/rms_dsh/plugins/generic/rms-dingtalk-session/dsh/host.mjs'
+    - id: rms-worklog
+      name: 'file:///C:/Users/admin/Documents/trae_projects/rms_dsh/plugins/generic/rms-worklog/dsh/host.mjs'
+    - id: rms-front-service
+      name: 'file:///C:/Users/admin/Documents/trae_projects/rms_dsh/plugins/project/rms-front-service/dsh/host.mjs'
+    - id: rms-domain-registry
+      name: 'file:///C:/Users/admin/Documents/trae_projects/rms_dsh/plugins/generic/rms-domain-registry/dsh/host.mjs'

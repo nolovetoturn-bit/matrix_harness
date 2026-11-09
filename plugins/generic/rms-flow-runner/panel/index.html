@@ -1,0 +1,2016 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Flow Runner · 工作流会话组</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --bg: #f4f6f8;
+      --surface: #ffffff;
+      --surface-muted: #f7f8fa;
+      --text: #18201d;
+      --muted: #66736d;
+      --border: #dde3df;
+      --brand: #167a52;
+      --brand-soft: #eaf5ef;
+      --blue: #3568b8;
+      --blue-soft: #edf3fc;
+      --danger: #b5473c;
+      --danger-soft: #fff0ed;
+      --warning: #8a5a13;
+      --warning-soft: #fff6df;
+      --shadow: 0 8px 24px rgba(24, 32, 29, .06);
+      font-family: Inter, "Segoe UI", "Microsoft YaHei", sans-serif;
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; background: var(--bg); color: var(--text); font-size: 14px; }
+    button, textarea, input { font: inherit; }
+    button { cursor: pointer; }
+    [hidden] { display: none !important; }
+    .app { height: 100vh; display: grid; grid-template-rows: 60px minmax(0, 1fr); }
+    .topbar {
+      display: flex; align-items: center; justify-content: space-between; gap: 16px;
+      padding: 0 20px; background: var(--surface); border-bottom: 1px solid var(--border);
+    }
+    .brand { display: flex; align-items: center; gap: 11px; min-width: 0; }
+    .brand-mark {
+      width: 31px; height: 31px; display: grid; place-items: center; border-radius: 9px;
+      background: var(--brand); color: #fff; font-weight: 750; letter-spacing: -.5px;
+    }
+    .brand h1 { font-size: 15px; margin: 0 0 2px; }
+    .brand p { margin: 0; color: var(--muted); font-size: 11.5px; }
+    .top-actions { display: flex; align-items: center; gap: 11px; }
+    .live { color: var(--muted); font-size: 12px; display: flex; align-items: center; gap: 6px; }
+    .live::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: var(--brand); }
+    .btn {
+      border: 1px solid var(--border); border-radius: 8px; background: var(--surface); color: var(--text);
+      padding: 7px 12px; font-size: 13px; transition: border-color .15s, background .15s;
+    }
+    .btn:hover { border-color: #abbab2; background: var(--surface-muted); }
+    .btn:disabled { opacity: .55; cursor: wait; }
+    .btn-primary { background: var(--brand); border-color: var(--brand); color: #fff; }
+    .btn-primary:hover { background: #116743; border-color: #116743; }
+    .layout {
+      display: grid; grid-template-columns: 288px minmax(0, 1fr) 452px;
+      min-height: 0; transition: grid-template-columns .18s ease;
+    }
+    .layout.trace-collapsed { grid-template-columns: 288px minmax(0, 1fr) 66px; }
+    .sidebar { background: var(--surface); border-right: 1px solid var(--border); padding: 17px 12px; overflow-y: auto; }
+    .panel-head { display: flex; justify-content: space-between; align-items: baseline; padding: 0 7px 11px; }
+    .panel-head h2 { font-size: 13px; margin: 0; letter-spacing: .2px; }
+    .panel-head span { color: var(--muted); font-size: 11.5px; }
+    .group { margin-bottom: 16px; }
+    .group-name {
+      display: flex; align-items: center; gap: 7px; padding: 7px 8px; color: var(--muted);
+      font-size: 11.5px; font-weight: 650; overflow-wrap: anywhere;
+    }
+    .group-name::before { content: ""; width: 7px; height: 7px; border: 1.5px solid var(--brand); border-radius: 2px; flex: none; }
+    .run-card {
+      display: block; width: 100%; text-align: left; border: 1px solid transparent; border-radius: 9px;
+      background: transparent; padding: 11px; margin: 2px 0; color: inherit;
+    }
+    .run-card:hover { background: var(--surface-muted); }
+    .run-card.active { background: var(--brand-soft); border-color: #c9e3d6; }
+    .run-card-top { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+    .run-name { font-weight: 650; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; }
+    .run-stage { color: var(--muted); margin-top: 6px; font-size: 11.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .run-time { color: var(--muted); margin-top: 4px; font-size: 10.5px; }
+    .tree-row { display: flex; align-items: flex-start; gap: 3px; }
+    .tree-row > .run-card { flex: 1; width: auto; min-width: 0; }
+    .tree-toggle {
+      flex: none; width: 17px; height: 28px; display: grid; place-items: center; padding: 0;
+      border: 0; border-radius: 5px; background: transparent; color: var(--muted); font-size: 10px;
+    }
+    .tree-toggle:hover { background: var(--surface-muted); color: var(--text); }
+    .tree-toggle.placeholder { visibility: hidden; }
+    .tree-children { margin-left: 8px; padding-left: 7px; border-left: 1px dashed var(--border); }
+    .tree-children .run-card { padding: 9px; }
+    .tree-children .run-name { font-size: 12px; }
+    .tree-children .run-stage, .tree-children .run-time { font-size: 10.5px; }
+    .child-link { width: 100%; text-align: left; color: inherit; }
+    .child-link:hover { border-color: #abbab2; background: var(--surface-muted); }
+    .badge {
+      display: inline-flex; align-items: center; gap: 5px; flex: none; border-radius: 999px;
+      padding: 3px 8px; font-size: 10.5px; font-weight: 650; background: var(--surface-muted); color: var(--muted);
+    }
+    .badge.running, .badge.pending { color: var(--blue); background: var(--blue-soft); }
+    .badge.waiting_human, .badge.draft, .badge.paused { color: var(--warning); background: var(--warning-soft); }
+    .badge.completed, .badge.confirmed { color: var(--brand); background: var(--brand-soft); }
+    .badge.failed, .badge.plan_failed, .badge.cancelled, .badge.stale { color: var(--danger); background: var(--danger-soft); }
+    .badge.superseded, .badge.rejected { color: var(--muted); background: var(--surface-muted); }
+    .badge.awaiting_confirm, .badge.clarifying, .badge.evaluating { color: var(--warning); background: var(--warning-soft); }
+    .badge.planning, .badge.executing, .badge.intake, .badge.building, .badge.repairing, .badge.retrying { color: var(--blue); background: var(--blue-soft); }
+    .badge.accepted, .badge.implemented, .badge.decomposed, .badge.repaired { color: var(--brand); background: var(--brand-soft); }
+    .badge.exhausted { color: var(--danger); background: var(--danger-soft); }
+    .btn-small { padding: 5px 9px; font-size: 11.5px; }
+    .btn-danger { color: var(--danger); }
+    .btn-danger:hover { border-color: #dfb0a8; background: var(--danger-soft); }
+
+    .session { border-right: 1px solid var(--border); background: var(--surface-muted); display: flex; flex-direction: column; min-width: 0; min-height: 0; }
+    .session-head { padding: 16px 22px 12px; background: var(--surface); border-bottom: 1px solid var(--border); }
+    .session-head h2 { margin: 0 0 4px; font-size: 17px; letter-spacing: -.2px; }
+    .session-head p { margin: 0; color: var(--muted); font-size: 12px; overflow-wrap: anywhere; }
+    .session-stack { flex: 1; min-height: 0; display: grid; grid-template-rows: minmax(220px, .9fr) minmax(260px, 1.1fr); }
+    .overview { min-height: 0; overflow-y: auto; padding: 15px 20px 20px; border-bottom: 1px solid var(--border); background: var(--surface); }
+    .context-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; margin-bottom: 11px; }
+    .context-head h3 { margin: 0 0 4px; font-size: 14px; overflow-wrap: anywhere; }
+    .context-head p { margin: 0; color: var(--muted); font-size: 11px; line-height: 1.5; overflow-wrap: anywhere; }
+    .context-badges { display: flex; gap: 5px; flex: none; }
+    .summary-card { border: 1px solid var(--border); border-radius: 9px; background: var(--surface-muted); padding: 10px 11px; margin-top: 9px; }
+    .summary-card h4 { margin: 0 0 6px; font-size: 11.5px; }
+    .summary-card p { margin: 0; font-size: 12px; line-height: 1.6; white-space: pre-wrap; overflow-wrap: anywhere; }
+    .summary-card.supervisor { background: var(--blue-soft); border-color: #d5e1f3; }
+    .summary-card.error { background: var(--danger-soft); border-color: #efc2bb; }
+    .build-head, .build-progress { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+    .build-head h4 { margin: 0; }
+    .build-progress { margin-top: 8px; color: var(--muted); font-size: 10.5px; }
+    .build-track { height: 4px; margin-top: 5px; border-radius: 999px; background: var(--border); overflow: hidden; }
+    .build-track i { display: block; height: 100%; border-radius: inherit; background: var(--brand); transition: width .2s ease; }
+    .build-current { display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: center; gap: 4px 7px; margin-top: 9px; padding: 8px; border-radius: 7px; background: var(--blue-soft); color: var(--blue); font-size: 11.5px; }
+    .build-current small { grid-column: 2; color: var(--muted); overflow-wrap: anywhere; }
+    .build-current.waiting { display: block; background: var(--warning-soft); color: var(--warning); }
+    .build-current.waiting small { display: block; margin-top: 4px; }
+    .build-nodes { display: grid; gap: 4px; margin-top: 9px; }
+    .build-node { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 34px; padding-top: 5px; padding-right: 7px; padding-bottom: 5px; border: 1px solid var(--border); border-radius: 6px; background: var(--surface); }
+    .build-node.current { border-color: var(--blue); box-shadow: 0 0 0 2px rgba(53,104,184,.1); }
+    .build-node.failed { border-color: #efc2bb; }
+    .build-node-name { min-width: 0; font-size: 11px; font-weight: 650; overflow-wrap: anywhere; }
+    .build-node-name small { display: block; margin-top: 2px; color: var(--muted); font-size: 9.5px; font-weight: 400; }
+    .build-node .badge { flex: none; }
+    .build-node-actions { display: flex; align-items: center; gap: 5px; flex: none; }
+    .mail-list { display: grid; gap: 6px; margin-top: 8px; max-height: 260px; overflow-y: auto; }
+    .mail-item { border: 1px solid var(--border); border-radius: 8px; background: var(--surface); overflow: hidden; }
+    .mail-item.unread { border-color: #cbdaf1; background: var(--blue-soft); }
+    .mail-item > summary { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 7px 9px; cursor: pointer; list-style: none; }
+    .mail-item > summary::-webkit-details-marker { display: none; }
+    .mail-route { color: var(--muted); font-size: 10.5px; overflow-wrap: anywhere; }
+    .mail-time { margin-left: auto; color: var(--muted); font-size: 9.5px; }
+    .mail-subject { flex: 1 1 100%; font-size: 11.5px; font-weight: 650; overflow-wrap: anywhere; }
+    .mail-body { margin: 0; padding: 0 9px 9px; color: var(--muted); font-size: 11px; line-height: 1.55; white-space: pre-wrap; overflow-wrap: anywhere; }
+    .mail-refs { padding: 0 9px 8px; color: var(--muted); font-size: 9.5px; overflow-wrap: anywhere; }
+    .citations { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 8px; }
+    .citation { border: 1px solid var(--border); border-radius: 5px; background: var(--surface); color: var(--muted); padding: 3px 6px; font-size: 10px; }
+    .overview-title { display: flex; align-items: center; justify-content: space-between; margin: 14px 0 8px; }
+    .overview-title h3 { margin: 0; font-size: 12px; }
+    .overview-title span { color: var(--muted); font-size: 10.5px; }
+    .action-list { display: grid; gap: 8px; }
+    .action-card { border: 1px solid #e2d2a9; border-radius: 9px; background: var(--warning-soft); padding: 10px 11px; }
+    .action-card.resolved { border-color: var(--border); background: var(--surface-muted); }
+    .action-head { display: flex; align-items: center; gap: 7px; margin-bottom: 5px; }
+    .action-head strong { font-size: 12px; }
+    .action-head .badge { margin-left: auto; }
+    .action-card p { margin: 0; font-size: 11.5px; line-height: 1.55; overflow-wrap: anywhere; }
+    .action-card small { display: block; color: var(--muted); margin-top: 5px; font-size: 10px; }
+    .action-buttons { display: flex; flex-wrap: wrap; gap: 7px; margin-top: 9px; }
+    .conversation { min-height: 0; display: flex; flex-direction: column; }
+    .conversation-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 10px 20px 0; }
+    .conversation-head h3 { margin: 0; font-size: 12px; }
+    .conversation-head span { color: var(--muted); font-size: 10.5px; }
+    .messages { flex: 1; min-height: 0; overflow-y: auto; padding: 13px 20px 18px; display: flex; flex-direction: column; gap: 11px; }
+    .msg { max-width: 88%; border: 1px solid var(--border); border-radius: 12px; background: var(--surface); padding: 10px 12px; box-shadow: 0 1px 2px rgba(24,32,29,.03); }
+    .msg.mine { align-self: flex-end; background: var(--brand-soft); border-color: #cfe6da; }
+    .msg.supervisor { border-color: #d5e1f3; }
+    .msg.system { max-width: 100%; align-self: center; background: transparent; border-style: dashed; box-shadow: none; }
+    .msg-meta { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; color: var(--muted); font-size: 10px; margin-bottom: 5px; }
+    .msg-meta b { color: var(--text); font-weight: 650; font-size: 11px; }
+    .msg p { margin: 0; line-height: 1.6; overflow-wrap: anywhere; white-space: pre-wrap; font-size: 12.5px; }
+    .msg pre { margin-top: 7px; max-height: 150px; }
+    .session-empty { color: var(--muted); text-align: center; margin: auto; padding: 26px; line-height: 1.7; }
+    .supervise-form { padding: 10px 20px 14px; background: var(--surface); border-top: 1px solid var(--border); }
+    .supervise-form textarea, .plan-panel textarea, .plan-panel input {
+      width: 100%; border: 1px solid var(--border); border-radius: 8px; background: var(--surface);
+      color: var(--text); padding: 9px 10px; outline: none; resize: vertical;
+    }
+    .supervise-form textarea { min-height: 58px; font-size: 12px; line-height: 1.5; }
+    .supervise-form textarea:focus, .plan-panel textarea:focus, .plan-panel input:focus { border-color: var(--brand); box-shadow: 0 0 0 3px rgba(22,122,82,.1); }
+    .plan-panel { padding: 14px 20px; background: var(--brand-soft); border-bottom: 1px solid #cfe6da; overflow-y: auto; max-height: 70vh; }
+    .plan-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+    .plan-head h3 { margin: 0; font-size: 13px; }
+    .plan-grid { display: grid; gap: 9px; }
+    .plan-grid label { display: grid; gap: 5px; color: var(--muted); font-size: 10.5px; font-weight: 650; }
+    .plan-grid textarea { min-height: 70px; font-size: 12px; background: var(--surface); }
+    .plan-grid input { background: var(--surface); font-size: 12px; }
+    .plan-grid .json-input { font-family: "Cascadia Code", Consolas, monospace; }
+
+    .trace { background: var(--surface); display: flex; flex-direction: column; min-width: 0; border-left: 0; }
+    .trace.collapsed { align-items: center; }
+    .trace-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; padding: 15px 16px 11px; border-bottom: 1px solid var(--border); }
+    .trace-head h2 { margin: 0 0 3px; font-size: 13px; }
+    .trace-head p { margin: 0; color: var(--muted); font-size: 11px; }
+    .icon-btn { border: 1px solid var(--border); background: var(--surface); border-radius: 7px; padding: 4px 9px; font-size: 11.5px; color: var(--muted); }
+    .icon-btn:hover { color: var(--text); border-color: #abbab2; }
+    .trace-body { flex: 1; overflow-y: auto; padding: 14px 16px 34px; }
+    .trace.collapsed .trace-head { justify-content: center; padding: 10px 6px; border-bottom: 0; }
+    .trace.collapsed .trace-head > div, .trace.collapsed .trace-body { display: none; }
+    .trace.collapsed .icon-btn { padding: 4px 6px; }
+    .trace-rail { display: none; }
+    .trace.collapsed .trace-rail {
+      display: flex; flex-direction: column; align-items: center; gap: 12px; padding: 14px 0;
+      width: 100%; cursor: pointer;
+    }
+    .rail-label { writing-mode: vertical-rl; letter-spacing: 3px; color: var(--muted); font-size: 11.5px; }
+    .rail-node {
+      writing-mode: vertical-rl; max-height: 220px; overflow: hidden; text-overflow: ellipsis;
+      font-size: 11.5px; padding: 8px 5px; border-radius: 6px; background: var(--surface-muted);
+      border: 1px solid var(--border); color: var(--text);
+    }
+    .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--border); flex: none; }
+    .dot.running { background: var(--blue); }
+    .dot.waiting_human, .dot.draft, .dot.paused { background: var(--warning); }
+    .dot.completed { background: var(--brand); }
+    .dot.failed, .dot.plan_failed, .dot.cancelled { background: var(--danger); }
+
+    .pipeline { display: flex; flex-wrap: wrap; gap: 6px; margin: 10px 0 4px; }
+    .stage {
+      display: inline-flex; align-items: center; gap: 5px; border: 1px solid var(--border); border-radius: 999px;
+      background: var(--surface); color: var(--muted); padding: 4px 9px; font-size: 10.5px; font-weight: 650;
+    }
+    .stage.done { border-color: #c9e3d6; background: var(--brand-soft); color: var(--brand); }
+    .stage.current { border-color: #cbdaf1; background: var(--blue-soft); color: var(--blue); }
+    .stage.waiting { border-color: #ead39b; background: var(--warning-soft); color: var(--warning); }
+    .stage.failed { border-color: #efc2bb; background: var(--danger-soft); color: var(--danger); }
+    .qa-list { display: grid; gap: 7px; margin-top: 8px; }
+    .qa { border-left: 2px solid var(--border); padding: 5px 0 5px 9px; }
+    .qa b { display: block; font-size: 11.5px; margin-bottom: 3px; }
+    .qa p { margin: 0; color: var(--muted); font-size: 11.5px; line-height: 1.55; overflow-wrap: anywhere; }
+    .qa .answer { color: var(--text); }
+    .criteria { margin: 7px 0 0; padding-left: 18px; font-size: 11.5px; line-height: 1.6; }
+    .criteria li { margin-bottom: 2px; overflow-wrap: anywhere; }
+    .ask-form { margin-top: 10px; }
+    .ask-form textarea {
+      width: 100%; min-height: 62px; resize: vertical; border: 1px solid var(--border); border-radius: 8px;
+      padding: 8px 10px; background: var(--surface); color: var(--text); outline: none; font-size: 12px;
+    }
+    .ask-form textarea:focus { border-color: var(--brand); box-shadow: 0 0 0 3px rgba(22,122,82,.1); }
+    .revise-box { margin-top: 10px; }
+    .revise-box summary { cursor: pointer; font-size: 11.5px; color: var(--muted); list-style: none; }
+    .revise-box summary::-webkit-details-marker { display: none; }
+    .revise-box summary::after { content: " +"; }
+    .revise-box[open] summary::after { content: " −"; }
+    .revise-box textarea {
+      width: 100%; min-height: 52px; margin-top: 7px; resize: vertical; border: 1px solid var(--border);
+      border-radius: 8px; padding: 8px 10px; background: var(--surface); color: var(--text); outline: none; font-size: 12px;
+    }
+    .notice { border: 1px solid var(--border); border-radius: 10px; background: var(--surface-muted); padding: 12px 13px; margin-bottom: 14px; }
+    .notice.waiting { border-color: #ead39b; background: var(--warning-soft); }
+    .notice.failed { border-color: #efc2bb; background: var(--danger-soft); }
+    .notice.running { border-color: #cbdaf1; background: var(--blue-soft); }
+    .notice-title { display: flex; align-items: center; gap: 7px; font-weight: 700; font-size: 12.5px; margin-bottom: 5px; }
+    .notice p { margin: 4px 0 0; line-height: 1.55; overflow-wrap: anywhere; font-size: 12px; }
+    .notice small { display: block; margin-top: 5px; color: var(--muted); overflow-wrap: anywhere; font-size: 10.5px; }
+    .human-form { margin-top: 11px; }
+    .human-form label { display: block; font-size: 11px; font-weight: 650; margin-bottom: 6px; }
+    .human-form textarea {
+      width: 100%; min-height: 92px; resize: vertical; border: 1px solid var(--border); border-radius: 8px;
+      padding: 9px 10px; background: var(--surface); color: var(--text); outline: none;
+      font: 12px/1.55 "Cascadia Code", Consolas, monospace;
+    }
+    .human-form textarea:focus { border-color: var(--brand); box-shadow: 0 0 0 3px rgba(22, 122, 82, .1); }
+    .form-footer { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 8px; }
+    .form-hint { color: var(--muted); font-size: 10.5px; }
+    .section-title { display: flex; align-items: baseline; justify-content: space-between; margin: 16px 0 9px; }
+    .section-title h3 { margin: 0; font-size: 12.5px; }
+    .section-title span { color: var(--muted); font-size: 10.5px; }
+    .legend { display: flex; flex-wrap: wrap; gap: 9px; margin: 0 0 9px; color: var(--muted); font-size: 10.5px; }
+    .legend span { display: inline-flex; align-items: center; gap: 4px; }
+
+    .dag-wrap { position: relative; border: 1px solid var(--border); border-radius: 10px; background: var(--surface-muted); overflow: auto; }
+    .dag { position: relative; margin: 0 auto; }
+    .dag svg { position: absolute; inset: 0; pointer-events: none; }
+    .dag-node {
+      position: absolute; width: 132px; border: 1.5px solid var(--border); border-radius: 8px;
+      background: var(--surface); padding: 7px 8px; box-shadow: 0 1px 2px rgba(24,32,29,.05);
+      cursor: pointer;
+    }
+    .dag-node:hover { border-color: var(--brand); background: var(--brand-soft); }
+    .dag-node:focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; }
+    .dag-node.drillable { border-style: dashed; }
+    .dag-node.drillable .dag-kind::after { content: " · 可下钻"; color: var(--brand); }
+    .dag-node.completed { border-color: var(--brand); }
+    .dag-node.running { border-color: var(--blue); box-shadow: 0 0 0 3px rgba(53,104,184,.12); }
+    .dag-node.waiting_human { border-color: var(--warning); box-shadow: 0 0 0 3px rgba(138,90,19,.12); }
+    .dag-node.failed { border-color: var(--danger); }
+    .dag-node.current { box-shadow: 0 0 0 3px rgba(22,122,82,.16); }
+    .dag-node.readonly { opacity: .55; border-style: dashed; }
+    .dag-node.readonly .dag-kind::after { content: " · 待子构建"; color: var(--warning); }
+    .dag-label { font-size: 11.5px; font-weight: 650; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .dag-kind { color: var(--muted); font-size: 9.5px; margin-top: 2px; display: flex; align-items: center; gap: 4px; overflow: hidden; white-space: nowrap; }
+    .dag-runtime { color: var(--brand); font: 600 9.5px "Cascadia Code", Consolas, monospace; flex: none; }
+
+    .steps { display: grid; gap: 7px; }
+    .step { border: 1px solid var(--border); border-radius: 9px; background: var(--surface); overflow: hidden; }
+    .step summary { display: flex; align-items: center; gap: 8px; padding: 9px 11px; cursor: pointer; list-style: none; }
+    .step summary::-webkit-details-marker { display: none; }
+    .step summary::after { content: "+"; margin-left: auto; color: var(--muted); font-size: 15px; }
+    .step[open] summary::after { content: "−"; }
+    .step-seq { color: var(--muted); font: 10px "Cascadia Code", Consolas, monospace; width: 18px; flex: none; }
+    .step-label { font-weight: 650; font-size: 12px; overflow-wrap: anywhere; }
+    .step-kind { color: var(--muted); font-size: 10px; border: 1px solid var(--border); border-radius: 4px; padding: 1px 4px; flex: none; }
+    .step-duration { color: var(--muted); font-size: 10px; flex: none; }
+    .step-body { border-top: 1px solid var(--border); padding: 10px; background: var(--surface-muted); }
+    .step-path { color: var(--muted); font: 10px/1.45 "Cascadia Code", Consolas, monospace; overflow-wrap: anywhere; margin-bottom: 8px; }
+    .io-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+    .io-block { min-width: 0; border: 1px solid var(--border); border-radius: 7px; background: var(--surface); overflow: hidden; }
+    .io-title { padding: 5px 8px; border-bottom: 1px solid var(--border); color: var(--muted); font-size: 9.5px; font-weight: 700; letter-spacing: .4px; text-transform: uppercase; }
+    pre {
+      margin: 0; padding: 8px; max-height: 240px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere;
+      color: #26332d; font: 11px/1.5 "Cascadia Code", Consolas, monospace;
+    }
+    .error-box, .details-box { margin-top: 8px; border: 1px solid var(--border); border-radius: 7px; background: var(--surface); overflow: hidden; }
+    .error-box { border-color: #efc2bb; }
+    .error-box .io-title { color: var(--danger); }
+    .event-log { margin-top: 15px; border: 1px solid var(--border); border-radius: 9px; background: var(--surface); overflow: hidden; }
+    .event-log > summary { cursor: pointer; padding: 9px 11px; font-size: 12px; font-weight: 650; list-style: none; }
+    .event-log > summary::-webkit-details-marker { display: none; }
+    .event-log > summary::after { content: "+"; float: right; color: var(--muted); }
+    .event-log[open] > summary::after { content: "−"; }
+    .event-list { border-top: 1px solid var(--border); padding: 5px 11px 9px; }
+    .event-item { display: grid; grid-template-columns: 58px minmax(0, 1fr); gap: 8px; padding: 7px 0; border-bottom: 1px dashed var(--border); font-size: 11px; }
+    .event-item:last-child { border-bottom: 0; }
+    .event-time { color: var(--muted); font-size: 10px; }
+    .event-item p { margin: 3px 0 0; color: var(--muted); line-height: 1.45; overflow-wrap: anywhere; }
+    .preview-note { border-color: #cbdaf1; background: var(--blue-soft); }
+    .empty {
+      height: 100%; display: grid; place-items: center; text-align: center; color: var(--muted); padding: 30px;
+    }
+    .empty strong { display: block; color: var(--text); font-size: 15px; margin-bottom: 7px; }
+    .empty code { color: var(--brand); }
+    .toast { position: fixed; right: 20px; bottom: 20px; max-width: 440px; background: #26332d; color: #fff; padding: 10px 14px; border-radius: 9px; box-shadow: var(--shadow); display: none; z-index: 5; font-size: 12.5px; }
+    .toast.visible { display: block; }
+    .step-def { display: flex; justify-content: flex-end; margin-bottom: 7px; }
+    .entry-card { border: 1px solid var(--border); border-radius: 9px; background: var(--surface); padding: 11px; }
+    .entry-card h4 { margin: 0 0 7px; font-size: 12px; }
+    .entry-list { display: grid; gap: 5px; margin-bottom: 9px; }
+    .entry-row { display: grid; grid-template-columns: 92px 92px minmax(0, 1fr); gap: 7px; align-items: baseline; padding: 4px 6px; border-radius: 6px; background: var(--surface-muted); font-size: 10.5px; }
+    .entry-name { font: 11px "Cascadia Code", Consolas, monospace; font-weight: 650; overflow-wrap: anywhere; }
+    .entry-type { color: var(--muted); }
+    .entry-meta { color: var(--muted); overflow-wrap: anywhere; }
+    .entry-desc { grid-column: 1 / -1; color: var(--muted); }
+    .entry-form textarea { width: 100%; min-height: 74px; resize: vertical; border: 1px solid var(--border); border-radius: 7px; padding: 7px 8px; background: var(--surface-muted); font: 11px/1.5 "Cascadia Code", Consolas, monospace; }
+    .entry-form input[type="text"] { width: 100%; border: 1px solid var(--border); border-radius: 7px; padding: 7px 8px; background: var(--surface-muted); font: 11px "Cascadia Code", Consolas, monospace; }
+    .entry-form input[type="text"]:disabled { color: var(--muted); }
+    .entry-form .form-footer { margin-top: 7px; }
+    .def-modal { position: fixed; inset: 0; z-index: 20; display: flex; align-items: center; justify-content: center; padding: 24px; background: rgba(24,32,29,.42); }
+    .def-card { width: min(780px, 100%); max-height: 84vh; display: flex; flex-direction: column; background: var(--surface); border: 1px solid var(--border); border-radius: 12px; box-shadow: var(--shadow); overflow: hidden; }
+    .def-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; padding: 14px 16px; border-bottom: 1px solid var(--border); }
+    .def-head h3 { margin: 0 0 3px; font-size: 14px; }
+    .def-head p { margin: 0; color: var(--muted); font: 10.5px "Cascadia Code", Consolas, monospace; overflow-wrap: anywhere; }
+    .def-actions { display: flex; gap: 6px; flex: none; }
+    .def-body { flex: 1; overflow-y: auto; padding: 12px 16px 18px; display: grid; gap: 9px; align-content: start; }
+    .def-block { border: 1px solid var(--border); border-radius: 8px; background: var(--surface-muted); overflow: hidden; }
+    .def-block pre { max-height: 320px; }
+    .def-meta { display: flex; flex-wrap: wrap; gap: 6px; }
+    .def-chip { border: 1px solid var(--border); border-radius: 5px; background: var(--surface); padding: 2px 6px; font-size: 10px; color: var(--muted); }
+    .spinner { width: 11px; height: 11px; border: 2px solid currentColor; border-right-color: transparent; border-radius: 50%; animation: spin .8s linear infinite; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    @media (max-width: 1250px) {
+      .layout { grid-template-columns: 252px minmax(0, 1fr) 396px; }
+      .layout.trace-collapsed { grid-template-columns: 252px minmax(0, 1fr) 66px; }
+    }
+    @media (max-width: 1000px) {
+      .app { height: auto; min-height: 100vh; }
+      .layout, .layout.trace-collapsed { grid-template-columns: 1fr; }
+      .sidebar { max-height: 240px; border-right: 0; border-bottom: 1px solid var(--border); }
+      .session { border-right: 0; border-bottom: 1px solid var(--border); min-height: 50vh; }
+      .trace.collapsed { align-items: stretch; }
+      .trace.collapsed .trace-rail { flex-direction: row; justify-content: center; padding: 10px; }
+      .rail-label, .rail-node { writing-mode: horizontal-tb; max-height: none; }
+      .live { display: none; }
+    }
+    @media (max-width: 560px) {
+      .topbar { padding: 0 12px; }
+      .brand p { display: none; }
+      .session-head { padding: 13px 14px 10px; }
+      .messages { padding: 14px; }
+      .msg { max-width: 94%; }
+      .io-grid { grid-template-columns: 1fr; }
+      .form-footer { align-items: flex-start; flex-direction: column; }
+      .step-duration, .step-kind { display: none; }
+    }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <header class="topbar">
+      <div class="brand">
+        <div class="brand-mark">λ</div>
+        <div><h1>Flow Runner</h1><p>经验辅助规划 → IR 执行 → 总会话监督</p></div>
+      </div>
+      <div class="top-actions"><span class="live">干预需人工确认</span><button id="new-plan" class="btn btn-primary">新建规划</button><button id="refresh" class="btn">刷新</button></div>
+    </header>
+    <div class="layout" id="layout">
+      <aside class="sidebar">
+        <div class="panel-head"><h2>工作流会话</h2><span id="run-count">0 个会话</span></div>
+        <div id="groups"></div>
+      </aside>
+      <section class="session">
+        <div class="session-head"><h2 id="session-title">任务与会话</h2><p id="session-sub">需求分析 → 澄清 → 规划 → 确认 → 执行 → 验收</p></div>
+        <form id="plan-form" class="plan-panel" hidden>
+          <div class="plan-head"><h3 id="plan-title">受理新任务</h3><button id="close-plan" class="icon-btn" type="button">关闭</button></div>
+          <div class="plan-grid">
+            <label>任务描述<textarea id="plan-task" required placeholder="说明目标、约束和期望结果；会话会先判断信息是否足够，不足会追问"></textarea></label>
+            <label>会话显示名（可选）<input id="plan-name" placeholder="留空自动取任务前 48 字"></label>
+            <label>默认入口 Cin（可选 JSON）<textarea id="plan-input" class="json-input" spellcheck="false" placeholder="留空则由规划器决定"></textarea></label>
+          </div>
+          <div class="form-footer"><span id="plan-hint" class="form-hint">受理后先分析需求；规划草稿确认后才执行。</span><button id="plan-submit" class="btn btn-primary" type="submit">受理任务</button></div>
+        </form>
+        <div class="session-stack">
+          <section class="overview" id="overview"></section>
+          <section class="conversation">
+            <div class="conversation-head"><h3>监督会话</h3><span>跨版本消息 · 建议需确认</span></div>
+            <div class="messages" id="messages"></div>
+            <form id="supervise-form" class="supervise-form">
+              <textarea id="supervise-input" placeholder="输入监督指令；留空则仅分析当前状态"></textarea>
+              <div class="form-footer"><span id="supervise-hint" class="form-hint">监督器不能修改 Cin/Cout，也不能直接控制运行。</span><button id="supervise-submit" class="btn" type="submit">监督分析</button></div>
+            </form>
+          </section>
+        </div>
+      </section>
+      <aside class="trace" id="trace">
+        <div class="trace-head">
+          <div><h2>运行轨迹</h2><p id="trace-sub">—</p></div>
+          <button class="icon-btn" id="toggle-trace" type="button">收起</button>
+        </div>
+        <div class="trace-body" id="trace-body"></div>
+        <div class="trace-rail" id="trace-rail"></div>
+      </aside>
+    </div>
+  </div>
+  <div id="toast" class="toast" role="alert"></div>
+  <div id="def-modal" class="def-modal" hidden>
+    <div class="def-card" role="dialog" aria-modal="true" aria-labelledby="def-title">
+      <div class="def-head">
+        <div>
+          <h3 id="def-title">节点定义</h3>
+          <p id="def-sub">—</p>
+        </div>
+        <div class="def-actions">
+          <button class="btn btn-small" id="def-copy" type="button">复制 JSON</button>
+          <button class="btn btn-small" id="def-close" type="button">关闭</button>
+        </div>
+      </div>
+      <div class="def-body" id="def-body"></div>
+    </div>
+  </div>
+  <script>
+    const state = {
+      sessions: [], session: null, build: null, buildStack: null, mail: null, children: [], sessionRuns: [], sessionMessages: [], sessionActions: [], run: null,
+      selectedSessionId: null, selectedRunId: null, refreshing: false, submitting: false,
+      draft: '{}', openPaths: new Set(), eventsOpen: false, previewActionId: null,
+      answerDraft: '', reviseDraft: '', dagReviseDraft: '', definition: null, dagDefinition: null, buildDagDefinition: null, selectedNode: null, nodeIndex: null,
+      invokeDraft: '', workspaceDraft: null, collapsed: localStorage.getItem('flowTraceCollapsed') === '1', reviseMode: false,
+      collapsedSessions: loadCollapsedSessions(),
+    }
+    function loadCollapsedSessions() {
+      try { return new Set(JSON.parse(localStorage.getItem('flowCollapsedSessions') || '[]')) } catch { return new Set() }
+    }
+    const $ = selector => document.querySelector(selector)
+    const statusNames = {
+      intake: '已受理', clarifying: '等待澄清', planning: '规划中', awaiting_confirm: '待确认', executing: '执行中',
+      evaluating: '验收中', accepted: '已验收',
+      draft: '规划草稿', plan_failed: '规划失败', running: '运行中', waiting_human: '等待人工',
+      paused: '已暂停', completed: '已完成', failed: '失败', cancelled: '已终止',
+      building: '编码中', built: '构建完成', implemented: '已完成', decomposed: '已拆解',
+      repairing: '自动修复中', retrying: '修复后重跑中', repaired: '自动修复成功', exhausted: '自动修复次数已用尽',
+      superseded: '已被新版替代', pending: '未执行', confirmed: '已确认', rejected: '已拒绝', stale: '已过期',
+      awaiting_start: '待确认启动', awaiting_dag: '待确认 DAG', awaiting_accept: '待验收', waiting_children: '等待子构建',
+    }
+    const actionStatusNames = { pending: '待确认', confirmed: '已确认', rejected: '已拒绝', stale: '已过期' }
+    const actionNames = { start: '启动工作流', pause: '暂停工作流', terminate: '终止工作流', replan: '重新规划', insert_human: '插入人工中断' }
+    const roleNames = {
+      planner: '规划器', supervisor: '监督分析员', analyst: '需求分析员', evaluator: '验收评估员',
+      user: '我的指令', system: '系统记录',
+    }
+    const kindNames = { det: 'Det', llm: 'LLM', agent: 'Agent', tool: 'Tool', script: 'Script', http: 'HTTP', human: '人工', subflow: '子流程', sequence: '顺序', branch: '分支', fold: 'Fold', loop: '循环', or_else: '容错', failure: '失败' }
+    const mailKindNames = { context: '上下文', question: '提问', bug_report: '缺陷反馈', answer: '答复', note: '备注' }
+    const mailKindStyles = { context: 'building', question: 'waiting_human', bug_report: 'failed', answer: 'completed', note: 'superseded' }
+
+    function nodeRuntime(node) {
+      if (!node || !node.type) return ''
+      if (node.type === 'script') return node.runtime || 'script'
+      if (node.type === 'http') {
+        const method = String(node.method || 'GET').toUpperCase()
+        return method === 'GET' ? 'http' : `http.${method.toLowerCase()}`
+      }
+      if (node.type === 'tool') return node.tool ? `tool · ${node.tool}` : 'tool'
+      if (node.type === 'det') return '内置表达式'
+      if (node.type === 'llm') return node.mode === 'choose' ? 'LLM 选择' : 'LLM 生成'
+      if (node.type === 'agent') return 'Agent 会话'
+      if (node.type === 'human') return '人工输入'
+      return kindNames[node.type] || node.type
+    }
+    const esc = value => String(value ?? '').replace(/[&<>"']/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[char])
+    const pretty = value => JSON.stringify(value ?? null, null, 2)
+    const badge = (status, label) => `<span class="badge ${esc(status)}">${esc(label || statusNames[status] || status)}</span>`
+    const actionBadge = status => `<span class="badge ${esc(status)}">${esc(actionStatusNames[status] || status)}</span>`
+    const time = value => value ? new Date(value).toLocaleString('zh-CN', { hour12: false }) : '—'
+    const shortTime = value => value ? new Date(value).toLocaleTimeString('zh-CN', { hour12: false }) : '—'
+    const duration = step => {
+      if (!step.finished_at) return ''
+      const ms = Math.max(0, new Date(step.finished_at) - new Date(step.started_at))
+      return ms < 1000 ? `${ms}ms` : `${(ms / 1000).toFixed(1)}s`
+    }
+    let toastTimer
+    function toast(message) {
+      clearTimeout(toastTimer)
+      $('#toast').textContent = message
+      $('#toast').classList.add('visible')
+      toastTimer = setTimeout(() => $('#toast').classList.remove('visible'), 5000)
+    }
+    async function api(path, options) {
+      // 相对路径：既可独立端口访问，也可挂在 dsh 的 /flow-runner/ 路由下
+      const response = await fetch(String(path).replace(/^\//, ''), options)
+      const data = await response.json()
+      if (!response.ok) throw new Error(data.error || `HTTP ${response.status}`)
+      return data
+    }
+
+    function indexDefinition(definition) {
+      const map = new Map()
+      const walk = node => {
+        if (!node || typeof node !== 'object') return
+        if (node.id) map.set(String(node.id), node)
+        if (node.type === 'sequence') (node.steps || []).forEach(walk)
+        else if (node.type === 'branch') { walk(node.then); walk(node.else) }
+        else if (node.type === 'fold' || node.type === 'loop') walk(node.body)
+        else if (node.type === 'or_else') { walk(node.primary); walk(node.fallback) }
+      }
+      walk(definition?.entry)
+      return map
+    }
+
+    function buildPlaceholders(definition) {
+      const found = []
+      const visit = node => {
+        if (!node || typeof node !== 'object') return
+        if (node.type === 'subflow' && node.build !== undefined && node.definition === undefined && node.ref === undefined) {
+          found.push({ node_id: node.id, label: node.label || node.id })
+        }
+        if (node.type === 'sequence') (node.steps || []).forEach(visit)
+        else if (node.type === 'branch') { visit(node.then); visit(node.else) }
+        else if (node.type === 'fold' || node.type === 'loop') visit(node.body)
+        else if (node.type === 'or_else') { visit(node.primary); visit(node.fallback) }
+        if (node.type === 'subflow' && node.definition?.entry) visit(node.definition.entry)
+      }
+      visit(definition?.entry)
+      return found
+    }
+
+    function actionPlaceholders(action) {
+      const runInfo = state.sessionRuns.find(run => run.id === action.run_id)
+      if (runInfo?.build_placeholders) return runInfo.build_placeholders
+      return state.run?.id === action.run_id ? buildPlaceholders(state.run.definition) : []
+    }
+
+    async function prebuildRun(runId, button) {
+      if (state.submitting) return
+      setBusy(true)
+      const stop = button ? startProgress(button, '正在预构建', '预构建子流程') : null
+      try {
+        // 服务端把整栈推进放到后台队列后立即返回，面板靠 3 秒轮询展示进度
+        const result = await api(`/api/runs/${runId}?action=prebuild`, {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ background: true }),
+        })
+        state.selectedRunId = result.run_id
+        await refresh()
+        toast('预构建已在后台开始，进度会自动刷新；遇到人工门禁会停下等待确认')
+      } catch (error) {
+        toast(error.message)
+        await refresh()
+      } finally {
+        if (stop) stop()
+        setBusy(false)
+      }
+    }
+
+    // 人工门禁操作：确认启动子构建（先出 DAG）/ 确认 DAG 开始预构建 / 验收子构建并回填父占位
+    async function runBuildGate(action, sessionId, button) {
+      if (state.submitting) return
+      setBusy(true)
+      const progress = {
+        'start-build': ['正在生成骨架 DAG', '确认启动构建'],
+        'confirm-dag': ['正在按 DAG 预构建', '确认 DAG 并预构建'],
+        'retry-build': ['正在重试失败节点', '重试失败节点'],
+        'accept-build': ['正在验收回填', '验收通过并回填'],
+      }[action] || ['处理中', '确认']
+      const stop = button ? startProgress(button, progress[0], progress[1]) : null
+      try {
+        // 后台推进：请求立即返回，长节点构建不会再把按钮卡成一直转圈
+        await api(`/api/sessions/${encodeURIComponent(sessionId)}?action=${action}`, {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ background: true }),
+        })
+        toast({
+          'start-build': '已受理构建，骨架 DAG 生成后等待人工确认（进度自动刷新）',
+          'confirm-dag': 'DAG 已确认，预构建已在后台推进',
+          'retry-build': '已重置失败节点，构建在后台继续推进',
+          'accept-build': '已验收回填，构建栈在后台继续推进',
+        }[action] || '已处理')
+        await refresh()
+      } catch (error) {
+        toast(error.message)
+        await refresh()
+      } finally {
+        if (stop) stop()
+        setBusy(false)
+      }
+    }
+
+    function nodeDefinitionBlocks(node) {
+      const blocks = []
+      const block = (title, value) => {
+        if (value === undefined || value === null || value === '') return
+        const text = typeof value === 'string' ? value : JSON.stringify(value, null, 2)
+        blocks.push(`<div class="def-block"><div class="io-title">${esc(title)}</div><pre>${esc(text)}</pre></div>`)
+      }
+      if (node.type === 'llm') {
+        block('提示词 prompt', node.prompt)
+        if (node.mode === 'choose') {
+          block('候选 options', node.options)
+          block('候选表达式 options_expr', node.options_expr)
+        }
+      } else if (node.type === 'agent') {
+        block('系统提示 system', node.system)
+        block('任务提示 prompt', node.prompt)
+      } else if (node.type === 'human') {
+        block('人工提示 prompt', node.prompt)
+      } else if (node.type === 'det') {
+        if (node.op === 'expr') block('表达式 expr', node.expr)
+        else if (node.op === 'assert') { block('断言条件 condition', node.condition); block('失败信息 message', node.message) }
+        else block('字面量 value', node.value)
+      } else if (node.type === 'script') {
+        block('运行语言 runtime', node.runtime)
+        block('脚本代码 code', node.code)
+        block('参数 args', node.args)
+      } else if (node.type === 'http') {
+        block('请求地址 url', node.url)
+        block('请求方法 method', node.method || 'GET')
+        block('请求头 headers', node.headers)
+        block('请求体 body', node.body)
+      } else if (node.type === 'tool') {
+        block('工具名 tool', node.tool)
+        block('调用参数 args', node.args)
+      } else {
+        block('条件 condition', node.condition)
+        block('循环条件 while', node.while)
+        block('迭代项 items', node.items)
+      }
+      block('完整定义 JSON', node)
+      return blocks.join('')
+    }
+
+    function openNodeDefinition(nodeId, scope) {
+      const source = scope === 'dag' ? state.dagDefinition
+        : scope === 'build-dag' ? state.buildDagDefinition
+          : state.definition
+      const node = indexDefinition(source).get(String(nodeId))
+      if (!node) { toast(`找不到节点定义：${nodeId}`); return }
+      state.selectedNode = node
+      $('#def-title').textContent = `${kindNames[node.type] || node.type}${node.label ? ` · ${node.label}` : ''}`
+      $('#def-sub').textContent = `${node.id}${source?.name ? ` · ${source.name}` : ''} · 运行方式：${nodeRuntime(node)}`
+      $('#def-body').innerHTML = nodeDefinitionBlocks(node)
+      $('#def-modal').hidden = false
+    }
+
+    function closeNodeDefinition() {
+      state.selectedNode = null
+      $('#def-modal').hidden = true
+      $('#def-body').innerHTML = ''
+    }
+
+    function applyLayout() {
+      $('#layout').classList.toggle('trace-collapsed', state.collapsed)
+      $('#trace').classList.toggle('collapsed', state.collapsed)
+    }
+
+    function captureFocus() {
+      const element = document.activeElement
+      if (!element || !element.id) return null
+      const snapshot = { id: element.id }
+      if (typeof element.selectionStart === 'number') {
+        snapshot.start = element.selectionStart
+        snapshot.end = element.selectionEnd
+      }
+      return snapshot
+    }
+
+    function restoreFocus(snapshot) {
+      if (!snapshot) return
+      const element = document.getElementById(snapshot.id)
+      if (!element) return
+      element.focus()
+      if (typeof snapshot.start === 'number' && typeof element.setSelectionRange === 'function') {
+        try { element.setSelectionRange(snapshot.start, snapshot.end) } catch { /* 非文本框忽略 */ }
+      }
+    }
+
+    function startProgress(button, label, restoreLabel) {
+      const started = Date.now()
+      button.textContent = `${label} 0s`
+      const timer = setInterval(() => {
+        button.textContent = `${label} ${Math.floor((Date.now() - started) / 1000)}s`
+      }, 1000)
+      return () => {
+        clearInterval(timer)
+        button.textContent = restoreLabel
+      }
+    }
+
+    function stageText(session) {
+      const build = session.build
+      if (build?.status === 'building') {
+        const current = build.current_node
+        return current ? `编码中 · ${current.label || current.node_id}` : `拆解与编码中 · ${build.progress?.completed || 0}/${build.progress?.nodes || 0} 个节点`
+      }
+      if (build?.status === 'awaiting_dag') return '骨架 DAG 已生成 · 待人工确认后预构建'
+      if (build?.status === 'waiting_human') return `待人工 · ${build.human?.question || '构建需要确认'}`
+      if (build?.status === 'awaiting_accept') return '构建完成 · 待人工验收'
+      if (build?.status === 'awaiting_confirm') return '节点编码完成 · 待确认'
+      if (build?.status === 'failed') return `构建失败 · ${build.error?.node_id || '请查看详情'}`
+      if (build?.status === 'waiting_children') return '等待子流程构建与验收'
+      if (session.status === 'awaiting_start') return '子会话待确认启动构建'
+      if (session.status === 'awaiting_dag') return '骨架 DAG 已生成 · 待确认 DAG'
+      if (session.status === 'awaiting_accept') return '构建完成 · 待人工验收回填'
+      if (session.status === 'clarifying') return `等待回答 · ${(session.open_questions || []).length} 个问题`
+      if (session.status === 'awaiting_confirm') return '等待确认草稿或 replan'
+      if (session.status === 'executing') return '业务节点按 IR 执行'
+      if (session.status === 'evaluating') return '按验收标准评估运行事实'
+      if (session.status === 'accepted') return '验收通过，任务完成'
+      if (session.status === 'plan_failed') return '规划失败，可修订后重试'
+      return statusNames[session.status] || session.status
+    }
+
+    function sessionCard(session) {
+      return `<button class="run-card ${session.id === state.selectedSessionId ? 'active' : ''}" data-session-id="${esc(session.id)}">
+        <div class="run-card-top"><span class="run-name">${esc(session.name)}</span>${badge(session.status)}</div>
+        <div class="run-stage">${esc(stageText(session))}</div>
+        <div class="run-time">${session.unread_mail ? `信箱未读 ${session.unread_mail} 封 · ` : ''}${session.round || 0} 轮澄清 · ${(session.runs || []).length} 个版本 · ${esc(time(session.updated_at))}</div>
+      </button>`
+    }
+
+    function renderSessionNode(session, childrenOf) {
+      const children = childrenOf.get(session.id) || []
+      const collapsed = state.collapsedSessions.has(session.id)
+      return `<div class="tree-item">
+        <div class="tree-row">
+          ${children.length
+            ? `<button class="tree-toggle" type="button" data-tree-toggle="${esc(session.id)}" aria-expanded="${!collapsed}" title="${collapsed ? '展开' : '收起'} ${children.length} 个子会话">${collapsed ? '▸' : '▾'}</button>`
+            : '<span class="tree-toggle placeholder"></span>'}
+          ${sessionCard(session)}
+        </div>
+        ${children.length && !collapsed ? `<div class="tree-children">${children.map(child => renderSessionNode(child, childrenOf)).join('')}</div>` : ''}
+      </div>`
+    }
+
+    function renderSessions() {
+      $('#run-count').textContent = `${state.sessions.length} 个会话`
+      if (!state.sessions.length) {
+        $('#groups').innerHTML = '<div class="group-name">尚无会话</div>'
+        return
+      }
+      const byId = new Map(state.sessions.map(session => [session.id, session]))
+      let cursor = byId.get(state.selectedSessionId)
+      while (cursor?.parent_session_id && byId.has(cursor.parent_session_id)) {
+        state.collapsedSessions.delete(cursor.parent_session_id)
+        cursor = byId.get(cursor.parent_session_id)
+      }
+      const childrenOf = new Map()
+      const roots = []
+      for (const session of state.sessions) {
+        const parentId = session.parent_session_id && byId.has(session.parent_session_id) ? session.parent_session_id : null
+        if (!parentId) { roots.push(session); continue }
+        if (!childrenOf.has(parentId)) childrenOf.set(parentId, [])
+        childrenOf.get(parentId).push(session)
+      }
+      roots.sort((a, b) => String(b.updated_at || '').localeCompare(String(a.updated_at || '')))
+      for (const list of childrenOf.values()) list.sort((a, b) => String(a.created_at || '').localeCompare(String(b.created_at || '')))
+      $('#groups').innerHTML = roots.map(session => renderSessionNode(session, childrenOf)).join('')
+    }
+
+    function runEvents(runs) {
+      const events = []
+      for (const run of runs) {
+        events.push({ at: run.created_at, kind: 'start', run })
+        for (const step of run.trace || []) {
+          if (step.kind === 'human' && step.status === 'completed') {
+            events.push({ at: step.finished_at || step.started_at, kind: 'resume', run, step })
+          }
+        }
+        if (run.status === 'waiting_human' && run.pending) {
+          events.push({ at: run.updated_at, kind: 'wait', run, step: run.pending })
+        }
+        if (run.status === 'completed') events.push({ at: run.completed_at || run.updated_at, kind: 'done', run })
+        if (run.status === 'failed') events.push({ at: run.updated_at, kind: 'fail', run })
+      }
+      return events.sort((a, b) => String(a.at).localeCompare(String(b.at)))
+    }
+
+    function renderAction(action) {
+      const resolved = action.status !== 'pending'
+      const draft = action.draft
+      const placeholders = action.type === 'start' && !resolved ? actionPlaceholders(action) : []
+      const prebuildButton = `<button class="btn btn-small btn-primary" data-prebuild-run="${esc(action.run_id)}" ${state.submitting ? 'disabled' : ''}>预构建子流程（${placeholders.length}）</button>`
+      const confirmButton = `<button class="btn btn-small btn-primary" data-confirm-action="${esc(action.id)}" data-action-run="${esc(action.run_id)}" data-approved="true" ${state.submitting ? 'disabled' : ''}>确认执行</button>`
+      return `<article class="action-card ${resolved ? 'resolved' : ''}">
+        <div class="action-head"><strong>${esc(actionNames[action.type] || action.type)}</strong>${action.definition_version ? `<span class="citation">v${esc(action.definition_version)}</span>` : ''}${actionBadge(action.status)}</div>
+        <p>${esc(action.reason || '未提供原因')}</p>
+        ${placeholders.length ? `<p class="form-hint">含 ${placeholders.length} 个未构建子流程（${placeholders.map(item => esc(item.label)).join('、')}），需先逐个创建子会话构建完成才能执行。</p>` : ''}
+        ${draft?.summary ? `<p>${esc(draft.summary)}</p>` : ''}
+        <small>${esc(time(action.created_at))}${action.resolved_at ? ` · 处理于 ${esc(time(action.resolved_at))}` : ''}</small>
+        <div class="action-buttons">
+          ${draft?.definition ? `<button class="btn btn-small" data-preview-action="${esc(action.id)}">预览新 DAG</button>` : ''}
+          ${!resolved ? (placeholders.length ? prebuildButton : confirmButton) : ''}
+          ${!resolved ? `<button class="btn btn-small" data-confirm-action="${esc(action.id)}" data-action-run="${esc(action.run_id)}" data-approved="false" ${state.submitting ? 'disabled' : ''}>拒绝</button>` : ''}
+        </div>
+      </article>`
+    }
+
+    function renderBuildProgress(build) {
+      if (!build) return ''
+      const progress = build.progress || {}
+      const current = build.current_node
+      const nodes = []
+      const visit = (node, depth) => {
+        if (node.path !== 'root') nodes.push({ ...node, depth })
+        for (const child of node.children || []) visit(child, depth + 1)
+      }
+      if (build.tree) visit(build.tree, 0)
+      const nodeStatus = status => status === 'pending' ? '待编码' : (statusNames[status] || status)
+      return `<section class="summary-card build-card">
+        <div class="build-head"><h4>节点构建</h4>${badge(build.status)}</div>
+        <div class="build-progress"><span>${progress.completed || 0}/${progress.nodes || 0} 个节点已处理</span><span>${progress.percent || 0}%</span></div>
+        <div class="build-track"><i style="width:${Math.min(100, Math.max(0, progress.percent || 0))}%"></i></div>
+        ${current ? (() => {
+          const attempts = (build.sessions || []).filter(item => item.path === current.path).length + 1
+          const elapsed = current.started_at ? Math.max(0, Math.round((Date.now() - new Date(current.started_at).getTime()) / 1000)) : null
+          const last = (build.sessions || []).at(-1)
+          return `<div class="build-current"><span class="spinner"></span><strong>正在编码：${esc(current.label || current.node_id)}</strong>
+            <small>${esc(current.node_id)} · ${esc(current.path)} · 第 ${attempts} 次尝试${elapsed !== null ? ` · 已运行 ${elapsed}s` : ''}${last?.requested_session_id ? ` · 会话 ${esc(last.requested_session_id)}` : ''}</small></div>`
+        })() : ''}
+        ${build.status === 'waiting_human' && build.human ? `<div class="build-current waiting"><strong>等待人工：${esc(build.human.question)}</strong><small>${esc(build.human.node_id)} · ${esc(build.human.path)}</small></div>` : ''}
+        ${build.status === 'awaiting_dag' ? `<div class="build-current waiting"><strong>骨架 DAG 已生成，等待人工确认</strong><small>确认后开始逐节点预构建；未确认前不会编码</small></div>` : ''}
+        ${build.status === 'awaiting_confirm' && (build.origin?.parent_kind === 'build' || build.origin?.run_id) ? `<div class="build-current waiting"><strong>构建完成，可独立运行</strong><small>运行与验收独立；在右侧直接运行验证，验收后回填父级占位</small></div>` : ''}
+        ${build.status === 'awaiting_accept' ? `<div class="build-current waiting"><strong>构建完成，等待人工验收</strong><small>验收后回填父级占位并继续整树构建</small></div>` : ''}
+        ${build.error?.message ? `<div class="error-box"><div class="io-title">构建失败${build.error.node_id ? ` · ${esc(build.error.node_id)}` : ''}</div><pre>${esc(build.error.message)}</pre>
+          <div class="action-buttons"><button class="btn btn-primary btn-small" data-retry-build="${esc(build.session_id || '')}" ${state.submitting ? 'disabled' : ''}>重试失败节点并继续</button></div></div>` : ''}
+        <div class="build-nodes">${nodes.map(node => `<div class="build-node ${esc(node.status)}${current?.node_id === node.id ? ' current' : ''}" style="padding-left:${8 + node.depth * 14}px">
+          <span class="build-node-name">${esc(node.intent || node.id)}<small>${esc(node.id)} · ${esc(node.role)}</small></span>${badge(node.status, nodeStatus(node.status))}
+        </div>`).join('') || '<div class="session-empty">骨架拆解完成后显示节点状态</div>'}</div>
+        ${(build.sessions || []).length ? `<div class="section-title"><h3>最近节点会话</h3><span>共 ${build.sessions.length} 次</span></div>
+          <div class="build-nodes">${build.sessions.slice(-5).reverse().map(item => `<div class="build-node ${esc(item.status)}">
+            <span class="build-node-name">${esc(item.path)}<small>${esc(item.decision || '')}${item.attempt ? ` · 第${item.attempt}次` : ''}${item.requested_session_id ? ` · ${esc(item.requested_session_id)}` : ''}</small></span>
+            <span class="build-node-actions">${item.error?.message ? `<span class="citation" title="${esc(item.error.message)}">错误</span>` : ''}${badge(item.status, item.status)}</span>
+          </div>`).join('')}</div>` : ''}
+        ${build.readonly_definition?.entry ? `<div class="section-title"><h3>构建中 DAG</h3><span>只读 · 占位待子构建</span></div>${renderDag(null, build)}` : ''}
+      </section>`
+    }
+
+    function renderBuildStack(stack) {
+      if (!stack?.entries?.length) return ''
+      const statusText = status => status === 'pending' ? '待构建'
+        : status === 'awaiting_confirm' ? '待运行/验收'
+          : (statusNames[status] || status)
+      const entries = stack.entries.map(entry => {
+        const owner = entry.parent_kind === 'run' ? '草稿占位' : `构建占位 ${entry.parent_id || ''}`
+        const gate = entry.status === 'awaiting_start' && entry.session_id
+          ? `<button class="btn btn-small btn-primary" data-start-build="${esc(entry.session_id)}" ${state.submitting ? 'disabled' : ''}>确认启动</button>`
+          : entry.status === 'awaiting_dag' && entry.session_id
+            ? `<button class="btn btn-small btn-primary" data-confirm-dag="${esc(entry.session_id)}" ${state.submitting ? 'disabled' : ''}>确认 DAG</button>`
+            : entry.status === 'failed' && entry.session_id
+              ? `<button class="btn btn-small btn-primary" data-retry-build="${esc(entry.session_id)}" ${state.submitting ? 'disabled' : ''}>重试</button>`
+              : ['awaiting_confirm', 'awaiting_accept'].includes(entry.status) && entry.session_id
+                ? `<button class="btn btn-small btn-primary" data-accept-build="${esc(entry.session_id)}" ${state.submitting ? 'disabled' : ''}>确认验收</button>`
+                : ''
+        const open = entry.session_id
+          ? `<button class="btn btn-small" data-open-session="${esc(entry.session_id)}">进入会话</button>`
+          : ''
+        return `<div class="build-node ${esc(entry.status)}" style="padding-left:${8 + (entry.depth || 0) * 14}px">
+        <span class="build-node-name">${esc(entry.label || entry.node_id)}<small>${esc(owner)} · ${esc(entry.node_id)}</small></span>
+        <span class="build-node-actions">${open}${gate}${badge(entry.status, statusText(entry.status))}</span>
+      </div>`
+      }).join('')
+      return `<section class="summary-card build-card">
+        <div class="build-head"><h4>构建栈</h4>${badge(stack.status, stack.status === 'done' ? '栈空 · 构建完成' : `根会话 ${esc(stack.root_session_id)}`)}</div>
+        <p class="form-hint">整棵树共用一个构建栈：子条目先于父条目推进，自底向上回填。子会话与父会话一致：受理 → 需求分析（不足则澄清）→ 生成骨架 DAG → 人工确认 DAG 并预构建 → 人工验收回填，任一条目暂停即整栈暂停。</p>
+        <div class="build-nodes">${entries}</div>
+      </section>`
+    }
+
+    // 人工门禁：子会话需求待补充 / 骨架 DAG 待确认 / 构建完成待验收
+    function renderBuildGate(session) {
+      if (!session) return ''
+      if (session.status === 'clarifying' && (session.origin?.parent_kind === 'build' || session.origin?.run_id)) {
+        return `<section class="summary-card build-card">
+          <div class="build-head"><h4>子会话需求待补充</h4>${badge('clarifying', '等待澄清')}</div>
+          <p>需求分析认为交接信息不足，请先回答下方澄清问题；信息补足后才会生成骨架 DAG。</p>
+        </section>`
+      }
+      if (session.status === 'awaiting_start') {
+        return `<section class="summary-card build-card">
+          <div class="build-head"><h4>子会话待确认启动</h4>${badge('awaiting_start', '待确认启动')}</div>
+          <p>该子会话由父级占位创建，尚未开始构建。确认后先生成骨架 DAG，DAG 确认通过才进入预构建。</p>
+          <div class="action-buttons"><button class="btn btn-primary btn-small" data-start-build="${esc(session.id)}" ${state.submitting ? 'disabled' : ''}>确认启动构建</button></div>
+        </section>`
+      }
+      if (state.build?.status === 'awaiting_dag') {
+        return `<section class="summary-card build-card">
+          <div class="build-head"><h4>骨架 DAG 已生成 · 待确认</h4>${badge('awaiting_dag', '待确认 DAG')}</div>
+          <p>先核对下面的只读 DAG（灰色节点为待子构建占位）。有意见可以先在下方提出，系统会按意见重新分析需求并生成新的 DAG；确认后才会开始逐节点预构建与编码。</p>
+          <form id="dag-revise-form" class="ask-form">
+            <textarea id="dag-revise-input" placeholder="对这份 DAG 的修改意见，例如：第 2 层不需要子流程、叶子层改为返回 1">${esc(state.dagReviseDraft)}</textarea>
+            <div class="form-footer"><span class="form-hint">提交意见只会重新生成 DAG，不会开始预构建。</span><button class="btn btn-small" type="submit" ${state.submitting ? 'disabled' : ''}>提交意见并重新生成 DAG</button></div>
+          </form>
+          <div class="action-buttons"><button class="btn btn-primary btn-small" data-confirm-dag="${esc(session.id)}" ${state.submitting ? 'disabled' : ''}>确认 DAG 并预构建</button></div>
+        </section>`
+      }
+      if (state.build?.status === 'awaiting_confirm' && (session.origin?.parent_kind === 'build' || session.origin?.run_id)) {
+        return `<section class="summary-card build-card">
+          <div class="build-head"><h4>构建完成 · 可独立运行</h4>${badge('awaiting_confirm', '待运行/验收')}</div>
+          <p>已生成可运行草稿：右侧可直接运行验证该子流程（运行记录独立，失败不影响父级构建）；验收通过后才回填父级占位并继续整棵树。</p>
+          <div class="action-buttons"><button class="btn btn-primary btn-small" data-accept-build="${esc(session.id)}" ${state.submitting ? 'disabled' : ''}>验收通过并回填</button></div>
+        </section>`
+      }
+      if (state.build?.status === 'awaiting_accept') {
+        return `<section class="summary-card build-card">
+          <div class="build-head"><h4>构建完成 · 待人工验收</h4>${badge('awaiting_accept', '待验收')}</div>
+          <p>该子构建已编译完成，确认验收后才会回填父级占位，并继续整棵树的构建。</p>
+          <div class="action-buttons"><button class="btn btn-primary btn-small" data-accept-build="${esc(session.id)}" ${state.submitting ? 'disabled' : ''}>验收通过并回填</button></div>
+        </section>`
+      }
+      return ''
+    }
+
+    function renderMailbox(mailbox) {
+      if (!mailbox) return ''
+      const mails = [...(mailbox.mails || [])].reverse()
+      const hidden = Math.max(0, (mailbox.total || 0) - mails.length)
+      const items = mails.map(mail => {
+        const flags = [
+          mail.read ? '' : '<span class="citation">未读</span>',
+          mail.requires_reply ? `<span class="citation">${mail.resolved ? '已回复' : '待回复'}</span>` : '',
+          mail.reply_to ? '<span class="citation">回复</span>' : '',
+        ].filter(Boolean).join('')
+        const refs = [mail.refs?.node_path, mail.refs?.node_id].filter(Boolean).join(' · ')
+        return `<details class="mail-item ${mail.read ? '' : 'unread'}">
+          <summary>${badge(mailKindStyles[mail.kind] || 'superseded', mailKindNames[mail.kind] || mail.kind)}
+            <span class="mail-route">${esc(mail.from_name)} → ${esc(mail.to_name)}</span>
+            <span class="mail-time">${esc(time(mail.created_at))}</span>${flags}
+            <span class="mail-subject">${esc(mail.subject || '—')}</span></summary>
+          <p class="mail-body">${esc(mail.body || '（空）')}</p>
+          ${refs ? `<div class="mail-refs">引用：${esc(refs)}</div>` : ''}
+        </details>`
+      }).join('')
+      return `<section class="summary-card mail-card">
+        <div class="build-head"><h4>会话信箱</h4><span>${mailbox.total || 0} 封 · 未读 ${mailbox.tree_unread || 0} · 待回复 ${mailbox.pending_reply || 0}</span></div>
+        <div class="mail-list">${items || '<div class="session-empty">暂无会话间通信。人工请求、问题答复和缺陷反馈会记录在这里。</div>'}</div>
+        ${hidden ? `<small>仅显示最近 ${mails.length} 封，另有 ${hidden} 封较早记录未显示。</small>` : ''}
+      </section>`
+    }
+
+    function renderChildren(children) {
+      if (!children?.length) return ''
+      return `<section class="summary-card children-card">
+        <div class="build-head"><h4>子流程会话</h4><span>${children.length} 个 · 点击进入</span></div>
+        <div class="build-nodes">${children.map(child => `<button class="build-node child-link" type="button" data-open-session="${esc(child.id)}" style="padding-left:8px">
+          <span class="build-node-name">${esc(child.name)}<small>${esc(child.id)}</small></span>${badge(child.status)}
+        </button>`).join('')}</div>
+      </section>`
+    }
+
+    function renderOverview() {
+      const session = state.session
+      if (!session) {
+        $('#overview').innerHTML = `<div class="session-empty"><strong>先受理任务，再形成工作流</strong><br>会话先判断信息是否足够：不足会追问，足够则检索经验生成 Workflow IR 草稿。<br>确认草稿后才执行，完成后再按验收标准评估。<br><br><button class="btn btn-primary" data-open-plan>受理新任务</button></div>`
+        return
+      }
+      const actions = [...state.sessionActions].sort((a, b) => String(b.created_at).localeCompare(String(a.created_at)))
+      const pendingCount = actions.filter(action => action.status === 'pending').length
+      const questions = session.analysis?.questions || []
+      const criteria = session.acceptance_criteria || []
+      const evaluations = [...(session.evaluations || [])].reverse()
+      const stages = state.build
+        ? ['building', 'awaiting_confirm', 'executing', 'evaluating', 'accepted']
+        : ['intake', 'clarifying', 'planning', 'awaiting_confirm', 'executing', 'evaluating', 'accepted']
+      const sessionStage = session.status === 'built' ? 'awaiting_confirm' : session.status
+      const currentIndex = stages.indexOf(sessionStage)
+      const pipeline = stages.map((stage, index) => {
+        const css = session.status === 'accepted' && stage !== 'accepted' ? 'done'
+          : index < currentIndex ? 'done'
+            : index === currentIndex ? (['plan_failed', 'failed', 'cancelled'].includes(session.status) ? 'failed' : 'current')
+              : ''
+        return `<span class="stage ${css}">${esc(statusNames[stage] || stage)}</span>`
+      }).join('')
+      const planner = session.plan
+      const retrieval = planner?.retrieval
+      const citations = (retrieval?.items || []).filter(item => (planner?.citations || []).includes(item.id))
+      const retrievalText = retrieval
+        ? retrieval.status === 'degraded' ? `经验检索已降级${retrieval.error ? `：${retrieval.error}` : ''}`
+          : retrieval.status === 'empty' ? '未检索到匹配经验，仍可按任务规划'
+            : `检索到 ${retrieval.items.length} 条经验${retrieval.fallback ? '（使用 pb-analysis 回退）' : ''}`
+        : ''
+      const qaItems = (session.clarifications || []).map(item => `<div class="qa"><b>问：${esc(item.question || '—')}</b><p class="answer">答：${esc(item.answer)}</p></div>`).join('')
+      const canRevise = ['intake', 'clarifying', 'planning', 'plan_failed', 'awaiting_confirm'].includes(session.status)
+      state.buildDagDefinition = state.build?.readonly_definition || null
+      $('#overview').innerHTML = `
+        <div class="context-head"><div><h3>${esc(session.name)}</h3><p>${esc(session.task)}<br>${esc(session.id)}</p></div><div class="context-badges">${badge(session.status)}</div></div>
+        <div class="pipeline">${pipeline}</div>
+        ${renderBuildGate(session)}
+        ${renderBuildProgress(state.build)}
+        ${renderBuildStack(state.buildStack)}
+        ${renderChildren(state.children)}
+        ${renderMailbox(state.mail)}
+        <section class="summary-card ${session.status === 'plan_failed' ? 'error' : ''}"><h4>规划草稿</h4><p>${esc(planner?.summary || (session.status === 'clarifying' ? '信息不足，尚未规划。' : '尚未生成规划草稿。'))}</p>
+          ${retrievalText ? `<small>${esc(retrievalText)}</small>` : ''}
+          ${citations.length ? `<div class="citations">${citations.map(item => `<span class="citation" title="${esc(item.id)}">${esc(item.title || item.id)}</span>`).join('')}</div>` : ''}
+        </section>
+        ${session.status === 'clarifying' ? `<section class="summary-card"><h4>需要你补充的信息</h4>
+          <div class="qa-list">${questions.map(question => `<div class="qa"><p>${esc(question)}</p></div>`).join('')}</div>
+          <form id="answer-form" class="ask-form"><textarea id="answer-input" placeholder="一次回答覆盖上述问题即可">${esc(state.answerDraft)}</textarea>
+            <div class="form-footer"><span class="form-hint">回答后会自动重新分析；信息足够即生成草稿。</span><button class="btn btn-primary btn-small" type="submit" ${state.submitting ? 'disabled' : ''}>提交回答</button></div>
+          </form>
+        </section>` : ''}
+        ${(session.assumptions || []).length ? `<section class="summary-card"><h4>已采用的假设</h4><ul class="criteria">${session.assumptions.map(item => `<li>${esc(item)}</li>`).join('')}</ul></section>` : ''}
+        ${criteria.length ? `<section class="summary-card"><h4>验收标准</h4><ul class="criteria">${criteria.map(item => `<li>${esc(item)}</li>`).join('')}</ul>
+          ${['completed', 'failed'].includes(state.run?.status) ? `<div class="action-buttons"><button class="btn btn-small" data-evaluate-session ${state.submitting ? 'disabled' : ''}>重新验收</button></div>` : ''}
+        </section>` : ''}
+        ${evaluations.length ? `<section class="summary-card ${evaluations[0].passed ? '' : 'supervisor'}"><h4>最近验收 · ${esc(time(evaluations[0].created_at))}</h4>
+          <p>${evaluations[0].passed ? '通过' : '未通过'}</p>
+          ${evaluations[0].gaps.length ? `<small>缺口：${esc(evaluations[0].gaps.join('；'))}</small>` : ''}
+          ${evaluations[0].evidence.length ? `<small>依据：${esc(evaluations[0].evidence.join('；'))}</small>` : ''}
+        </section>` : ''}
+        ${session.error?.message ? `<section class="summary-card error"><h4>会话异常</h4><p>${esc(session.error.message)}</p></section>` : ''}
+        ${(state.sessionRuns || []).length ? `<div class="overview-title"><h3>运行版本</h3><span>${state.sessionRuns.length} 个</span></div>
+          <div class="action-buttons">${state.sessionRuns.map(runItem => `<button class="btn btn-small ${runItem.id === state.selectedRunId ? '' : ''}" data-view-run="${esc(runItem.id)}">v${esc(runItem.definition_version || 1)} · ${esc(statusNames[runItem.status] || runItem.status)}</button>`).join('')}</div>` : ''}
+        <div class="overview-title"><h3>待确认动作</h3><span>${pendingCount} 个 · 不会自动执行</span></div>
+        <div class="action-list">${actions.map(renderAction).join('') || '<div class="session-empty">暂无动作。规划完成或验收不通过时会生成待确认动作。</div>'}</div>
+        ${qaItems ? `<div class="overview-title"><h3>澄清记录</h3><span>${(session.clarifications || []).length} 轮</span></div><div class="qa-list">${qaItems}</div>` : ''}
+        ${canRevise ? `<details class="revise-box"><summary>修订任务或规划方向</summary>
+          <form id="revise-form"><textarea id="revise-input" placeholder="说明要改什么；提交后会重新分析需求并生成新草稿">${esc(state.reviseDraft)}</textarea>
+            <div class="form-footer"><span class="form-hint">启动前的修订不会执行任何节点。</span><button class="btn btn-small" type="submit" ${state.submitting ? 'disabled' : ''}>提交修订</button></div>
+          </form></details>` : ''}`
+    }
+
+    function renderSession() {
+      const session = state.session
+      $('#session-title').textContent = session ? `${session.name} · ${statusNames[session.status] || session.status}` : '任务与会话'
+      $('#session-sub').textContent = session
+        ? session.task
+        : '需求分析 → 澄清 → 规划 → 确认 → 执行 → 验收'
+      if (!session) {
+        $('#messages').innerHTML = '<div class="session-empty">受理任务后，这里会显示需求分析、规划器、验收评估员和人工指令的跨版本消息。</div>'
+        return
+      }
+      const preExecution = ['intake', 'clarifying', 'planning', 'plan_failed', 'awaiting_confirm'].includes(session.status)
+      $('#supervise-hint').textContent = preExecution
+        ? '草稿尚未执行：这里的指令会触发会话级修订并重新规划，生成新草稿。'
+        : '监督器只读分析运行，修改建议需确认后才生效。'
+      $('#supervise-input').placeholder = preExecution
+        ? '说明要改什么；提交后会重新分析需求并生成新草稿'
+        : '输入监督指令；留空则仅分析当前状态'
+      $('#messages').innerHTML = state.sessionMessages.map(message => {
+        const mine = message.role === 'user'
+        const role = roleNames[message.role] || message.role
+        const citations = (message.citations || []).map(id => `<span class="citation">${esc(id)}</span>`).join('')
+        return `<article class="msg ${mine ? 'mine' : ''} ${esc(message.role)}">
+          <div class="msg-meta"><b>${esc(role)}</b><span>${esc(time(message.created_at))}</span>${message.definition_version ? `<span>v${esc(message.definition_version)}</span>` : ''}${message.mode ? `<span>${message.mode === 'automatic' ? '关键状态自动分析' : '手动分析'}</span>` : ''}</div>
+          <p>${esc(message.text)}</p>${citations ? `<div class="citations">${citations}</div>` : ''}
+        </article>`
+      }).join('') || '<div class="session-empty">还没有会话消息。可在上方回答澄清或生成规划。</div>'
+      const messages = $('#messages')
+      messages.scrollTop = messages.scrollHeight
+    }
+
+    function traceStatuses(run) {
+      const map = {}
+      for (const step of run.trace || []) map[step.node_id] = step
+      return map
+    }
+
+    function buildGraph(entry) {
+      const nodes = []
+      const edges = []
+      const index = new Map()
+      const keyOf = node => {
+        const key = String(node.id)
+        if (!index.has(key)) {
+          index.set(key, {
+            key, id: node.id, label: node.label || node.id, kind: node.type, runtime: nodeRuntime(node),
+            depth: 0, order: nodes.length, buildStatus: node.build_status || null, readonly: Boolean(node.readonly),
+          })
+          nodes.push(index.get(key))
+        }
+        return index.get(key)
+      }
+      function visit(node, depth, parent, edgeLabel, dashed) {
+        const current = keyOf(node)
+        current.depth = Math.max(current.depth, depth)
+        if (!current.visitDepth) current.visitDepth = depth
+        if (parent) edges.push({ from: parent.key, to: current.key, label: edgeLabel, dashed: Boolean(dashed) })
+        let maxDepth = depth
+        if (node.type === 'sequence') {
+          let cursor = depth + 1
+          let prev = current
+          for (const step of node.steps || []) {
+            const child = visit(step, cursor, prev)
+            prev = keyOf(step)
+            cursor = Math.max(cursor, child + 1)
+            maxDepth = Math.max(maxDepth, child)
+          }
+        } else if (node.type === 'branch') {
+          maxDepth = Math.max(maxDepth, visit(node.then, depth + 1, current, '是'))
+          if (node.else) maxDepth = Math.max(maxDepth, visit(node.else, depth + 1, current, '否', true))
+        } else if (node.type === 'fold') {
+          maxDepth = Math.max(maxDepth, visit(node.body, depth + 1, current, '每项'))
+        } else if (node.type === 'loop') {
+          const child = visit(node.body, depth + 1, current, '循环体')
+          edges.push({ from: keyOf(node.body).key, to: current.key, label: '回环', dashed: true })
+          maxDepth = Math.max(maxDepth, child)
+        } else if (node.type === 'or_else') {
+          maxDepth = Math.max(maxDepth, visit(node.primary, depth + 1, current, '主路径'))
+          maxDepth = Math.max(maxDepth, visit(node.fallback, depth + 1, current, '失败兜底', true))
+        }
+        return maxDepth
+      }
+      const maxDepth = visit(entry, 0, null)
+      return { nodes, edges, maxDepth }
+    }
+
+    function subflowRunOf(run, nodeId) {
+      if (!run) return null
+      const step = (run.trace || []).find(item => item.node_id === nodeId && item.details?.subflow_run_id)
+      if (step) return step.details.subflow_run_id
+      if (run.pending?.subflow_run_id && (!nodeId || run.pending.node_id === nodeId)) return run.pending.subflow_run_id
+      return null
+    }
+
+    function firstSubflowRun(run) {
+      if (!run) return null
+      const steps = [...(run.trace || [])].reverse()
+      for (const step of steps) {
+        if (step.details?.subflow_run_id) return step.details.subflow_run_id
+      }
+      return run.pending?.subflow_run_id || null
+    }
+
+    function openDagNode(nodeId) {
+      const node = state.nodeIndex?.get(String(nodeId))
+      if (node?.type === 'subflow') {
+        const child = subflowRunOf(state.run, nodeId)
+        if (child) {
+          toast(`进入子流程 ${child}`)
+          selectRunView(child)
+          return
+        }
+      }
+      openNodeDefinition(nodeId, 'dag')
+    }
+
+    function renderDag(run, build = null) {
+      const definition = build ? build.readonly_definition : run?.definition
+      if (!definition?.entry) return ''
+      const graph = buildGraph(definition.entry)
+      const byDepth = new Map()
+      for (const node of graph.nodes) {
+        if (!byDepth.has(node.depth)) byDepth.set(node.depth, [])
+        byDepth.get(node.depth).push(node)
+      }
+      const colW = 168
+      const nodeW = 132
+      const rowH = 78
+      const padX = 20
+      const padY = 16
+      const maxCount = Math.max(1, ...[...byDepth.values()].map(list => list.length))
+      const width = padX * 2 + maxCount * colW
+      const height = padY * 2 + (graph.maxDepth + 1) * rowH
+      const positions = new Map()
+      for (const [depth, list] of byDepth) {
+        list.sort((a, b) => a.order - b.order)
+        list.forEach((node, i) => {
+          const offset = (maxCount - list.length) * colW / 2
+          positions.set(node.key, { x: padX + offset + i * colW + (colW - nodeW) / 2, y: padY + depth * rowH })
+        })
+      }
+      const steps = traceStatuses(run || {})
+      const currentId = build ? build.current_node?.node_id : run?.current?.node_id
+      const buildStatusMap = { implemented: 'completed', decomposed: 'completed', building: 'running', pending: 'running', waiting_human: 'waiting_human', waiting_children: 'running', failed: 'failed' }
+      const statusOf = node => {
+        if (build) return buildStatusMap[node.buildStatus] || 'pending'
+        const step = steps[node.id]
+        if (step) return step.status === 'waiting_human' ? 'waiting_human' : step.status
+        return node.id === currentId ? 'running' : 'pending'
+      }
+      const defs = `<defs><marker id="arrow" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L8,4 L0,8 z" fill="var(--muted)"/></marker></defs>`
+      const paths = graph.edges.map(edge => {
+        const from = positions.get(edge.from)
+        const to = positions.get(edge.to)
+        if (!from || !to) return ''
+        const x1 = from.x + nodeW / 2
+        const y1 = from.y + 46
+        const x2 = to.x + nodeW / 2
+        const y2 = to.y
+        const mid = Math.max(24, Math.abs(y2 - y1) / 2)
+        const d = edge.dashed && y2 < y1
+          ? `M${x1},${y1} C${x1 + 70},${y1 + 24} ${x2 + 70},${y2 - 24} ${x2},${y2}`
+          : `M${x1},${y1} C${x1},${y1 + mid} ${x2},${y2 - mid} ${x2},${y2}`
+        const label = edge.label
+          ? `<text x="${(x1 + x2) / 2 + 5}" y="${(y1 + y2) / 2}" font-size="9" fill="var(--muted)">${esc(edge.label)}</text>`
+          : ''
+        return `<path d="${d}" fill="none" stroke="var(--muted)" stroke-opacity=".55" stroke-width="1.2" ${edge.dashed ? 'stroke-dasharray="4 3"' : ''} marker-end="url(#arrow)"/>${label}`
+      }).join('')
+      const boxes = graph.nodes.map(node => {
+        const position = positions.get(node.key)
+        const status = statusOf(node)
+        const current = node.id === currentId ? ' current' : ''
+        const childRun = !build && node.kind === 'subflow' ? subflowRunOf(run, node.id) : null
+        const hint = node.readonly
+          ? `待子构建占位：${node.id}（点击查看占位定义）`
+          : childRun
+            ? `点击或回车进入子流程：${childRun}`
+            : `点击或回车查看节点定义：${node.id} · 运行方式 ${node.runtime}`
+        return `<div class="dag-node ${esc(status)}${current}${childRun ? ' drillable' : ''}${node.readonly ? ' readonly' : ''}" style="left:${position.x}px;top:${position.y}px" ${build ? `data-build-dag-def="${esc(node.id)}"` : `data-dag-def="${esc(node.id)}"`} tabindex="0" role="button" title="${esc(hint)}">
+          <div class="dag-label">${esc(node.label)}</div>
+          <div class="dag-kind"><span class="dag-runtime">${esc(node.runtime)}</span> · ${esc(node.readonly ? '待子构建' : (statusNames[status] || status))}</div>
+        </div>`
+      }).join('')
+      return `<div class="dag-wrap"><div class="dag" style="width:${width}px;height:${height}px">
+        <svg width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">${defs}${paths}</svg>${boxes}
+      </div></div>`
+    }
+
+    function renderStep(step, index, steps) {
+      const shouldOpen = state.openPaths.has(step.path) || (!state.openPaths.size && (step.status === 'failed' || step.status === 'waiting_human' || index === steps.length - 1))
+      const node = state.nodeIndex?.get(String(step.node_id))
+      const runtime = node ? nodeRuntime(node) : ''
+      const kindLabel = `${kindNames[step.kind] || step.kind}${runtime && runtime !== (kindNames[step.kind] || step.kind) ? ` · ${runtime}` : ''}`
+      const childRun = step.details?.subflow_run_id || null
+      return `<details class="step" data-path="${esc(step.path)}" ${shouldOpen ? 'open' : ''}>
+        <summary>
+          <span class="step-seq">${String(step.seq).padStart(2, '0')}</span>
+          <span class="step-label">${esc(step.label || step.node_id)}</span>
+          <span class="step-kind" title="运行方式：${esc(runtime || kindLabel)}">${esc(kindLabel)}</span>
+          ${badge(step.status)}<span class="step-duration">${esc(duration(step))}</span>
+        </summary>
+        <div class="step-body">
+          <div class="step-def"><button class="btn btn-small" type="button" data-step-def="${esc(step.node_id)}">查看节点定义</button>
+            ${childRun ? `<button class="btn btn-small btn-primary" type="button" data-open-run="${esc(childRun)}">进入子流程 →</button>` : ''}</div>
+          <div class="step-path">${esc(step.path)}</div>
+          <div class="io-grid">
+            <div class="io-block"><div class="io-title">输入 Cin</div><pre>${esc(pretty(step.input))}</pre></div>
+            <div class="io-block"><div class="io-title">输出 Cout</div><pre>${esc(step.status === 'waiting_human' ? '等待人工输入…' : step.status === 'running' ? '执行中…' : pretty(step.output))}</pre></div>
+          </div>
+          ${step.error ? `<div class="error-box"><div class="io-title">错误</div><pre>${esc(pretty(step.error))}</pre></div>` : ''}
+          ${step.details ? `<div class="details-box"><div class="io-title">执行详情</div><pre>${esc(pretty(step.details))}</pre></div>` : ''}
+        </div>
+      </details>`
+    }
+
+    function renderEntryContract(run) {
+      if (!run?.definition) return ''
+      const inputs = run.definition.inputs
+      const rows = Object.entries(inputs || {})
+      const meta = spec => {
+        const parts = [spec.required ? '必填' : '可选']
+        if (spec.judge === 'llm') parts.push('LLM 解析')
+        if (Object.prototype.hasOwnProperty.call(spec, 'default')) parts.push(`默认 ${JSON.stringify(spec.default)}`)
+        if (Array.isArray(spec.enum)) parts.push(`枚举 ${spec.enum.map(value => JSON.stringify(value)).join('/')}`)
+        if (typeof spec.min === 'number') parts.push(`min ${spec.min}`)
+        if (typeof spec.max === 'number') parts.push(`max ${spec.max}`)
+        return parts.join(' · ')
+      }
+      return `<section class="entry-card">
+        <h4>入口契约 ${rows.length ? `· ${rows.length} 个字段` : '· 未声明'}</h4>
+        <div class="entry-list">${rows.map(([name, spec]) => `<div class="entry-row">
+          <span class="entry-name">${esc(name)}</span>
+          <span class="entry-type">${esc(spec.type)}</span>
+          <span class="entry-meta">${esc(meta(spec))}</span>
+          ${spec.description ? `<span class="entry-desc">${esc(spec.description)}</span>` : ''}
+        </div>`).join('') || '<div class="entry-desc">definition.inputs 未声明：入口 Cin 按任意 JSON 传入。</div>'}</div>
+        <form id="invoke-form" class="entry-form">
+          <textarea id="invoke-input" spellcheck="false" placeholder='{"字段":"值"}'>${esc(state.invokeDraft || pretty(run.input ?? {}))}</textarea>
+          <div class="form-footer"><span class="form-hint">${run.status === 'draft' && buildPlaceholders(run.definition).length ? '存在未构建的子流程占位，构建完成前不能运行。' : '直接按定义运行，不经过需求分析与规划；输入按契约校验后进入入口节点。'}</span>
+          <button class="btn btn-primary btn-small" type="submit" ${state.submitting || (run.status === 'draft' && buildPlaceholders(run.definition).length) ? 'disabled' : ''}>直接运行</button></div>
+        </form>
+      </section>`
+    }
+
+    function renderWorkspace(run) {
+      const session = state.session
+      const value = session?.workspace || run?.workspace || ''
+      const editable = Boolean(session)
+      return `<section class="entry-card">
+        <h4>工作目录</h4>
+        <form id="workspace-form" class="entry-form">
+          <input id="workspace-input" type="text" spellcheck="false" value="${esc(state.workspaceDraft ?? value)}" placeholder="留空使用会话默认目录（data_dir/workspaces/&lt;session_id&gt;）" ${editable ? '' : 'disabled'}>
+          <div class="form-footer"><span class="form-hint">${editable ? 'script 节点默认在此目录执行，相对 cwd 以此为根；脚本文件读写都应限制在目录内。' : '该运行没有会话记录，工作目录只读。'}</span>
+          ${editable ? `<button class="btn btn-small" type="submit" ${state.submitting ? 'disabled' : ''}>保存目录</button>` : ''}</div>
+        </form>
+      </section>`
+    }
+
+    function renderRepair(run) {
+      const repair = run.repair_state
+      if (!repair) return ''
+      const status = repair.status
+      const attempts = repair.attempts ?? (run.repairs || []).length
+      const active = ['repairing', 'retrying'].includes(status)
+      const title = status === 'repairing' ? `正在自动修复节点 ${repair.node_id || ''}`
+        : status === 'retrying' ? `节点 ${repair.node_id || ''} 已修复，正在自动重跑`
+          : status === 'repaired' ? `节点 ${repair.node_id || ''} 自动修复成功`
+            : status === 'exhausted' ? '自动修复次数已用尽，转交人工确认'
+              : '自动修复未生成有效结果，转交人工确认'
+      return `<section class="notice ${active ? 'running' : (['failed', 'exhausted'].includes(status) ? 'failed' : '')}">
+        <div class="notice-title">${active ? '<span class="spinner"></span>' : ''}${esc(title)} ${badge(status)}</div>
+        <p>已尝试 ${esc(attempts)} 次局部修复${repair.path ? ` · ${esc(repair.path)}` : ''}。只替换失败节点，保留其他节点和运行版本链。</p>
+        ${repair.error ? `<small>${esc(repair.error)}</small>` : ''}
+      </section>`
+    }
+
+    function renderNotice(run) {
+      if (['waiting_human', 'paused'].includes(run.status) && run.pending) {
+        return `<section class="notice waiting">
+          <div class="notice-title">${run.status === 'paused' ? '人工节点已暂停' : '人工节点等待输入'} ${badge(run.status)}</div>
+          <p>${esc(run.pending.prompt)}</p><small>${esc(run.pending.path)}</small>
+          <form id="human-form" class="human-form">
+            <label for="human-input">恢复输入（JSON）</label>
+            <textarea id="human-input" spellcheck="false">${esc(state.draft)}</textarea>
+            <div class="form-footer"><span class="form-hint">业务输入只注入原人工节点，不经过监督消息。</span><button class="btn btn-primary" type="submit" ${state.submitting ? 'disabled' : ''}>${state.submitting ? '正在恢复…' : '提交并继续'}</button></div>
+          </form>
+        </section>`
+      }
+      if (run.status === 'draft') {
+        const placeholders = buildPlaceholders(run.definition)
+        return `<section class="notice waiting"><div class="notice-title">工作流尚未启动 ${badge('draft')}</div><p>右栏是规划器生成的 IR 草稿。请在中栏确认“启动工作流”后才会执行节点。</p>
+          ${placeholders.length ? `<div class="action-buttons"><button class="btn btn-primary" data-prebuild-run="${esc(run.id)}" ${state.submitting ? 'disabled' : ''}>预构建子流程（${placeholders.length}）</button></div>
+          <p class="form-hint">含 ${placeholders.map(item => esc(item.label)).join('、')}。逐个创建子会话构建完成后才能启动执行。</p>` : ''}</section>`
+      }
+      if (run.status === 'plan_failed') {
+        return `<section class="notice failed"><div class="notice-title">规划失败 ${badge('plan_failed')}</div><p>${esc(run.error?.message || run.planner?.error || '未知错误')}</p><small>未创建工作流定义，也未执行任何业务节点。</small></section>`
+      }
+      if (run.status === 'paused') {
+        return `<section class="notice waiting"><div class="notice-title">工作流已暂停 ${badge('paused')}</div><p>轨迹已保留，可从当前稳定边界继续重放。</p><div class="action-buttons"><button class="btn btn-primary" data-resume-run="${esc(run.id)}" ${state.submitting ? 'disabled' : ''}>继续执行</button></div></section>`
+      }
+      if (run.status === 'failed') {
+        if (run.repair_state?.status === 'repairing') return ''
+        return `<section class="notice failed"><div class="notice-title">运行失败 ${badge('failed')}</div><p>${esc(run.error?.message || '未知错误')}</p><small>${esc(run.error?.path || '')}</small>
+          <div class="action-buttons"><button class="btn btn-primary" data-invoke-run="${esc(run.id)}" ${state.submitting ? 'disabled' : ''}>重试运行</button></div></section>`
+      }
+      if (run.status === 'running') {
+        if (run.repair_state?.status === 'retrying') return ''
+        return `<section class="notice running"><div class="notice-title"><span class="spinner"></span>正在执行 ${esc(run.current?.label || run.current?.node_id || '')}</div><p>业务按 IR 节点顺序推进，每个节点完成后都会持久化。</p></section>`
+      }
+      if (run.status === 'completed') {
+        return `<section class="notice"><div class="notice-title">运行完成 ${badge('completed')}</div><p>最终 Cout</p><pre>${esc(pretty(run.output))}</pre></section>`
+      }
+      if (run.status === 'cancelled') {
+        return `<section class="notice failed"><div class="notice-title">工作流已终止 ${badge('cancelled')}</div><p>既有轨迹保持不变，不再推进任何节点。</p></section>`
+      }
+      if (run.status === 'superseded') {
+        return `<section class="notice"><div class="notice-title">历史版本 ${badge('superseded')}</div><p>此版本已被 ${esc(run.superseded_by || '新版本')} 替代，原轨迹仅供审计。</p></section>`
+      }
+      return ''
+    }
+
+    function renderRunEvents(run) {
+      const names = { start: '创建工作流', wait: '等待人工输入', resume: '注入人工输入', done: '运行完成', fail: '运行失败' }
+      const events = runEvents([run]).reverse()
+      return `<details class="event-log" id="run-events" ${state.eventsOpen ? 'open' : ''}><summary>运行事件（${events.length}）</summary><div class="event-list">
+        ${events.map(event => `<div class="event-item"><span class="event-time">${esc(shortTime(event.at))}</span><div><strong>${esc(names[event.kind] || event.kind)}</strong>${event.kind === 'wait' ? `<p>${esc(event.step.prompt || '')}</p>` : ''}${event.kind === 'fail' ? `<p>${esc(run.error?.message || '')}</p>` : ''}</div></div>`).join('') || '<div class="session-empty">暂无运行事件</div>'}
+      </div></details>`
+    }
+
+    function renderRunParent(run) {
+      if (!run?.parent_run_id) return ''
+      return `<section class="notice">
+        <div class="notice-title">子流程运行 ${badge(run.status)}</div>
+        <p>隶属父运行 ${esc(run.parent_run_id)} · 节点 ${esc(run.parent_node_id || '—')}${run.parent_path ? ` · ${esc(run.parent_path)}` : ''}</p>
+        <div class="action-buttons"><button class="btn btn-small" type="button" data-open-run="${esc(run.parent_run_id)}">← 返回父运行（Alt+←）</button></div>
+      </section>`
+    }
+
+    function renderTrace() {
+      const run = state.run
+      if (!run) {
+        state.definition = null
+        state.dagDefinition = null
+        state.nodeIndex = null
+        $('#trace-sub').textContent = '—'
+        $('#trace-body').innerHTML = '<div class="empty"><div>选择一个运行查看 DAG、步骤 Cin/Cout 与运行事件</div></div>'
+        $('#trace-rail').innerHTML = '<span class="rail-label">运行轨迹</span>'
+        applyLayout()
+        return
+      }
+      const preview = state.sessionActions.find(action => action.id === state.previewActionId && action.draft?.definition)
+      const graphRun = preview ? { ...run, definition: preview.draft.definition, trace: [], current: null, status: 'draft' } : run
+      state.definition = run.definition || null
+      state.dagDefinition = graphRun.definition || null
+      state.nodeIndex = indexDefinition(state.definition)
+      $('#trace-sub').textContent = `${run.name} · v${run.definition_version || 1} · ${run.trace.length} 条节点记录 · fuel ${run.fuel?.remaining ?? '—'}/${run.fuel?.initial ?? '—'}${firstSubflowRun(run) ? ' · Alt+→ 进入子流程' : ''}`
+      const railStatus = run.current && run.status === 'running' ? 'running' : run.status
+      $('#trace-rail').innerHTML = `
+        <span class="rail-label">运行轨迹</span>
+        <span class="dot ${esc(railStatus)}"></span>
+        <span class="rail-node" title="${esc(run.current?.label || run.name)}">${esc(run.current?.label || statusNames[run.status] || '')}</span>`
+      $('#trace-body').innerHTML = `
+        ${preview ? `<section class="notice preview-note"><div class="notice-title">待确认版本预览</div><p>${esc(preview.draft.summary || actionNames[preview.type] || preview.type)}</p><small>仅预览 DAG，尚未执行。下方步骤仍属于当前实际运行。</small></section>` : ''}
+        ${renderRunParent(run)}
+        ${renderRepair(run)}
+        ${renderNotice(run)}
+        ${renderEntryContract(run)}
+        ${renderWorkspace(run)}
+        <div class="section-title"><h3>${preview ? '新定义预览' : '流程状态'}</h3><span>DAG</span></div>
+        <div class="legend">
+          <span><i class="dot completed"></i>已完成</span>
+          <span><i class="dot waiting_human"></i>等待人工</span>
+          <span><i class="dot running"></i>执行中</span>
+          <span><i class="dot failed"></i>失败</span>
+          <span><i class="dot"></i>未执行</span>
+        </div>
+        ${renderDag(graphRun) || '<div class="session-empty">没有可预览的工作流定义</div>'}
+        <div class="section-title"><h3>实际步骤输入输出</h3><span>Cin / Cout · 点击展开</span></div>
+        <div class="steps">${run.trace.map((step, index, steps) => renderStep(step, index, steps)).join('') || '<div class="session-empty">还没有实际步骤记录</div>'}</div>
+        ${renderRunEvents(run)}`
+      applyLayout()
+    }
+
+    async function refresh() {
+      if (state.refreshing) return
+      state.refreshing = true
+      const focus = captureFocus()
+      try {
+        const list = await api('/api/sessions')
+        state.sessions = list.sessions || []
+        if (!state.sessions.some(session => session.id === state.selectedSessionId)) {
+          state.selectedSessionId = state.sessions[0]?.id || null
+          state.selectedRunId = null
+          state.session = null
+          state.children = []
+          state.run = null
+          state.draft = '{}'
+          state.previewActionId = null
+          state.openPaths.clear()
+        }
+        if (!state.selectedSessionId) {
+          state.session = null
+          state.mail = null
+          state.children = []
+          state.sessionRuns = []
+          state.sessionMessages = []
+          state.sessionActions = []
+          state.run = null
+          renderSessions()
+          renderOverview()
+          renderSession()
+          renderTrace()
+          restoreFocus(focus)
+          return
+        }
+        const [detail, mailbox] = await Promise.all([
+          api(`/api/sessions/${encodeURIComponent(state.selectedSessionId)}`),
+          api(`/api/sessions/${encodeURIComponent(state.selectedSessionId)}/mail`).catch(() => null),
+        ])
+        state.session = detail.session
+        state.build = detail.build || null
+        state.buildStack = detail.build_stack || null
+        state.children = detail.children || []
+        state.mail = mailbox
+        state.sessionRuns = detail.runs
+        state.sessionMessages = detail.messages
+        state.sessionActions = detail.actions
+        if (!state.selectedRunId || !detail.runs.some(run => run.id === state.selectedRunId)) {
+          state.selectedRunId = state.session.active_run_id || state.session.draft_run_id || detail.runs[0]?.id || null
+        }
+        state.run = state.selectedRunId ? await api(`/api/runs/${state.selectedRunId}`) : null
+        if (!state.run) state.draft = '{}'
+        if (state.previewActionId && !detail.actions.some(action => action.id === state.previewActionId)) state.previewActionId = null
+        renderSessions()
+        renderOverview()
+        renderSession()
+        renderTrace()
+        restoreFocus(focus)
+      } catch (error) {
+        toast(error.message)
+      } finally {
+        state.refreshing = false
+      }
+    }
+
+    function selectSession(sessionId) {
+      if (sessionId === state.selectedSessionId) return
+      state.selectedSessionId = sessionId
+      state.selectedRunId = null
+      state.session = null
+      state.build = null
+      state.buildStack = null
+      state.mail = null
+      state.children = []
+      state.sessionRuns = []
+      state.sessionMessages = []
+      state.sessionActions = []
+      state.run = null
+      state.draft = '{}'
+      state.answerDraft = ''
+      state.reviseDraft = ''
+      state.dagReviseDraft = ''
+      state.invokeDraft = ''
+      state.workspaceDraft = null
+      state.previewActionId = null
+      state.openPaths.clear()
+      renderSessions()
+      renderOverview()
+      renderSession()
+      renderTrace()
+      refresh()
+    }
+
+    function selectRunView(runId) {
+      state.selectedRunId = runId
+      state.previewActionId = null
+      state.invokeDraft = ''
+      state.workspaceDraft = null
+      state.openPaths.clear()
+      refresh()
+    }
+
+    function setBusy(value) {
+      state.submitting = value
+      $('#new-plan').disabled = value
+      $('#plan-submit').disabled = value
+      $('#supervise-submit').disabled = value
+      renderOverview()
+      renderTrace()
+    }
+
+    function togglePlan(show) {
+      const form = $('#plan-form')
+      form.hidden = typeof show === 'boolean' ? !show : !form.hidden
+      if (!form.hidden) {
+        $('#plan-task').focus()
+      }
+    }
+
+    $('#groups').addEventListener('click', event => {
+      const toggle = event.target.closest('[data-tree-toggle]')
+      if (toggle) {
+        const id = toggle.dataset.treeToggle
+        if (state.collapsedSessions.has(id)) state.collapsedSessions.delete(id)
+        else state.collapsedSessions.add(id)
+        localStorage.setItem('flowCollapsedSessions', JSON.stringify([...state.collapsedSessions]))
+        renderSessions()
+        return
+      }
+      const card = event.target.closest('[data-session-id]')
+      if (card) selectSession(card.dataset.sessionId)
+    })
+    $('#new-plan').addEventListener('click', () => togglePlan())
+    $('#close-plan').addEventListener('click', () => togglePlan(false))
+    $('#overview').addEventListener('click', async event => {
+      const openSession = event.target.closest('[data-open-session]')
+      if (openSession) {
+        selectSession(openSession.dataset.openSession)
+        return
+      }
+      const startBuild = event.target.closest('[data-start-build]')
+      if (startBuild) {
+        await runBuildGate('start-build', startBuild.dataset.startBuild, startBuild)
+        return
+      }
+      const confirmDag = event.target.closest('[data-confirm-dag]')
+      if (confirmDag) {
+        await runBuildGate('confirm-dag', confirmDag.dataset.confirmDag, confirmDag)
+        return
+      }
+      const retryBuild = event.target.closest('[data-retry-build]')
+      if (retryBuild) {
+        await runBuildGate('retry-build', retryBuild.dataset.retryBuild, retryBuild)
+        return
+      }
+      const acceptBuild = event.target.closest('[data-accept-build]')
+      if (acceptBuild) {
+        await runBuildGate('accept-build', acceptBuild.dataset.acceptBuild, acceptBuild)
+        return
+      }
+      const buildDagNode = event.target.closest('[data-build-dag-def]')
+      if (buildDagNode) {
+        openNodeDefinition(buildDagNode.dataset.buildDagDef, 'build-dag')
+        return
+      }
+      if (event.target.closest('[data-open-plan]')) {
+        togglePlan(true)
+        return
+      }
+      const viewRun = event.target.closest('[data-view-run]')
+      if (viewRun) {
+        selectRunView(viewRun.dataset.viewRun)
+        return
+      }
+      const evaluate = event.target.closest('[data-evaluate-session]')
+      if (evaluate && !state.submitting) {
+        if (!state.selectedSessionId) { toast('请先选择一个会话'); return }
+        setBusy(true)
+        try {
+          await api(`/api/sessions/${encodeURIComponent(state.selectedSessionId)}?action=evaluate`, {
+            method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}',
+          })
+          await refresh()
+        } catch (error) {
+          toast(error.message)
+          await refresh()
+        } finally {
+          setBusy(false)
+        }
+        return
+      }
+      const preview = event.target.closest('[data-preview-action]')
+      if (preview) {
+        state.previewActionId = preview.dataset.previewAction
+        renderTrace()
+        return
+      }
+      const prebuild = event.target.closest('[data-prebuild-run]')
+      if (prebuild) {
+        await prebuildRun(prebuild.dataset.prebuildRun, prebuild)
+        return
+      }
+      const button = event.target.closest('[data-confirm-action]')
+      if (!button || state.submitting) return
+      const runId = button.dataset.actionRun
+      const actionId = button.dataset.confirmAction
+      const approved = button.dataset.approved === 'true'
+      setBusy(true)
+      try {
+        const result = await api(`/api/runs/${runId}?action=confirm`, {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action_id: actionId, approved }),
+        })
+        state.selectedRunId = result.id
+        state.previewActionId = null
+        await refresh()
+      } catch (error) {
+        toast(error.message)
+        await refresh()
+      } finally {
+        setBusy(false)
+      }
+    })
+    $('#overview').addEventListener('input', event => {
+      if (event.target.id === 'answer-input') state.answerDraft = event.target.value
+      else if (event.target.id === 'revise-input') state.reviseDraft = event.target.value
+      else if (event.target.id === 'dag-revise-input') state.dagReviseDraft = event.target.value
+    })
+    $('#overview').addEventListener('submit', async event => {
+      if (!state.selectedSessionId || state.submitting) return
+      if (event.target.id === 'answer-form') {
+        event.preventDefault()
+        const answer = state.answerDraft.trim()
+        if (!answer) { toast('回答不能为空'); return }
+        setBusy(true)
+        const button = event.target.querySelector('button[type="submit"]')
+        const stopProgress = button ? startProgress(button, '正在处理回答', '提交回答') : null
+        try {
+          await api(`/api/sessions/${encodeURIComponent(state.selectedSessionId)}?action=answer`, {
+            method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ answer }),
+          })
+          state.answerDraft = ''
+          await refresh()
+        } catch (error) {
+          toast(error.message)
+        } finally {
+          if (stopProgress) stopProgress()
+          setBusy(false)
+        }
+        return
+      }
+      if (event.target.id === 'dag-revise-form') {
+        event.preventDefault()
+        const instruction = state.dagReviseDraft.trim()
+        if (!instruction) { toast('修改意见不能为空'); return }
+        setBusy(true)
+        const button = event.target.querySelector('button[type="submit"]')
+        const stopProgress = button ? startProgress(button, '正在重新生成 DAG', '提交意见并重新生成 DAG') : null
+        try {
+          await api(`/api/sessions/${encodeURIComponent(state.selectedSessionId)}?action=revise`, {
+            method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ instruction }),
+          })
+          state.dagReviseDraft = ''
+          await refresh()
+          toast('已按意见重新生成 DAG，请再次确认')
+        } catch (error) {
+          toast(error.message)
+        } finally {
+          if (stopProgress) stopProgress()
+          setBusy(false)
+        }
+        return
+      }
+      if (event.target.id === 'revise-form') {
+        event.preventDefault()
+        const instruction = state.reviseDraft.trim()
+        if (!instruction) { toast('修订说明不能为空'); return }
+        setBusy(true)
+        const button = event.target.querySelector('button[type="submit"]')
+        const stopProgress = button ? startProgress(button, '正在重新规划', '提交修订') : null
+        try {
+          await api(`/api/sessions/${encodeURIComponent(state.selectedSessionId)}?action=revise`, {
+            method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ instruction }),
+          })
+          state.reviseDraft = ''
+          await refresh()
+        } catch (error) {
+          toast(error.message)
+        } finally {
+          if (stopProgress) stopProgress()
+          setBusy(false)
+        }
+      }
+    })
+    $('#plan-form').addEventListener('submit', async event => {
+      event.preventDefault()
+      if (state.submitting) return
+      const task = $('#plan-task').value.trim()
+      const name = $('#plan-name').value.trim()
+      const rawInput = $('#plan-input').value.trim()
+      if (!task) {
+        toast('任务描述不能为空')
+        return
+      }
+      const body = { task }
+      if (name) body.name = name
+      if (rawInput) {
+        try { body.input = JSON.parse(rawInput) } catch (error) { toast(`入口 Cin 不是合法 JSON：${error.message}`); return }
+      }
+      setBusy(true)
+      let stopProgress = null
+      try {
+        stopProgress = startProgress($('#plan-submit'), '正在分析需求', '受理任务')
+        const result = await api('/api/sessions', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+        })
+        state.selectedSessionId = result.session.id
+        state.selectedRunId = result.session.active_run_id || result.session.draft_run_id || null
+        state.session = null
+        state.run = null
+        state.previewActionId = null
+        state.openPaths.clear()
+        togglePlan(false)
+        if (result.session.status === 'clarifying') {
+          toast('信息不足，已在会话中提出澄清问题')
+        } else if (result.session.status === 'plan_failed') {
+          toast('规划未通过校验，未启动任何节点；可查看失败原因')
+        }
+        if (result.session.status !== 'clarifying') {
+          $('#plan-task').value = ''
+          $('#plan-name').value = ''
+          $('#plan-input').value = ''
+        }
+        await refresh()
+      } catch (error) {
+        toast(error.message)
+      } finally {
+        if (stopProgress) stopProgress()
+        $('#plan-submit').textContent = '受理任务'
+        setBusy(false)
+      }
+    })
+    $('#supervise-form').addEventListener('submit', async event => {
+      event.preventDefault()
+      if (state.submitting) return
+      if (!state.run) {
+        toast('请先选择一个运行')
+        return
+      }
+      const runId = state.run.id
+      const instruction = $('#supervise-input').value.trim() || '请分析当前运行状态，判断是否需要干预'
+      const session = state.session
+      const preExecution = session && ['intake', 'clarifying', 'planning', 'plan_failed', 'awaiting_confirm'].includes(session.status)
+      setBusy(true)
+      let stopProgress = null
+      try {
+        if (preExecution) {
+          stopProgress = startProgress($('#supervise-submit'), '正在重新规划', '监督分析')
+          await api(`/api/sessions/${encodeURIComponent(session.id)}?action=revise`, {
+            method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ instruction }),
+          })
+        } else {
+          stopProgress = startProgress($('#supervise-submit'), '正在监督分析', '监督分析')
+          await api(`/api/runs/${runId}?action=supervise`, {
+            method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ instruction }),
+          })
+        }
+        $('#supervise-input').value = ''
+        await refresh()
+      } catch (error) {
+        toast(error.message)
+      } finally {
+        if (stopProgress) stopProgress()
+        $('#supervise-submit').textContent = '监督分析'
+        setBusy(false)
+      }
+    })
+    $('#refresh').addEventListener('click', refresh)
+    $('#toggle-trace').addEventListener('click', () => {
+      state.collapsed = !state.collapsed
+      localStorage.setItem('flowTraceCollapsed', state.collapsed ? '1' : '0')
+      $('#toggle-trace').textContent = state.collapsed ? '展开' : '收起'
+      applyLayout()
+    })
+    $('#trace-rail').addEventListener('click', () => {
+      state.collapsed = false
+      localStorage.setItem('flowTraceCollapsed', '0')
+      $('#toggle-trace').textContent = '收起'
+      applyLayout()
+    })
+    $('#trace-body').addEventListener('toggle', event => {
+      if (event.target.id === 'run-events') {
+        state.eventsOpen = event.target.open
+        return
+      }
+      if (!event.target.matches('details.step')) return
+      if (event.target.open) state.openPaths.add(event.target.dataset.path)
+      else state.openPaths.delete(event.target.dataset.path)
+    }, true)
+    $('#trace-body').addEventListener('input', event => {
+      if (event.target.id === 'human-input') state.draft = event.target.value
+      if (event.target.id === 'invoke-input') state.invokeDraft = event.target.value
+      if (event.target.id === 'workspace-input') state.workspaceDraft = event.target.value
+    })
+    $('#trace-body').addEventListener('keydown', event => {
+      if (event.key !== 'Enter' && event.key !== ' ') return
+      const dagNode = event.target.closest('[data-dag-def]')
+      if (!dagNode) return
+      event.preventDefault()
+      openDagNode(dagNode.dataset.dagDef)
+    })
+    $('#trace-body').addEventListener('click', async event => {
+      const dagDef = event.target.closest('[data-dag-def]')
+      if (dagDef) { openDagNode(dagDef.dataset.dagDef); return }
+      const openRun = event.target.closest('[data-open-run]')
+      if (openRun) { selectRunView(openRun.dataset.openRun); return }
+      const stepDef = event.target.closest('[data-step-def]')
+      if (stepDef) { openNodeDefinition(stepDef.dataset.stepDef, 'run'); return }
+      const prebuild = event.target.closest('[data-prebuild-run]')
+      if (prebuild) {
+        await prebuildRun(prebuild.dataset.prebuildRun, prebuild)
+        return
+      }
+      const invokeRun = event.target.closest('[data-invoke-run]')
+      if (invokeRun && !state.submitting) {
+        setBusy(true)
+        try {
+          const result = await api(`/api/runs/${invokeRun.dataset.invokeRun}?action=invoke`, {
+            method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}',
+          })
+          state.selectedRunId = result.id
+          await refresh()
+          toast('已按同一份定义重新运行')
+        } catch (error) {
+          toast(error.message)
+        } finally {
+          setBusy(false)
+        }
+        return
+      }
+      const button = event.target.closest('[data-resume-run]')
+      if (!button || state.submitting) return
+      const runId = button.dataset.resumeRun
+      setBusy(true)
+      try {
+        await api(`/api/runs/${runId}?action=resume`, {
+          method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}',
+        })
+        await refresh()
+      } catch (error) {
+        toast(error.message)
+      } finally {
+        setBusy(false)
+      }
+    })
+    $('#trace-body').addEventListener('submit', async event => {
+      if (event.target.id === 'workspace-form') {
+        event.preventDefault()
+        if (state.submitting) return
+        const sessionId = state.session?.id
+        if (!sessionId) { toast('当前运行没有会话记录'); return }
+        const workspace = $('#workspace-input').value.trim()
+        setBusy(true)
+        try {
+          await api(`/api/sessions/${sessionId}?action=workspace`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(workspace ? { workspace } : {}),
+          })
+          state.workspaceDraft = null
+          toast('工作目录已更新')
+          await refresh()
+        } catch (error) {
+          toast(error.message)
+        } finally {
+          setBusy(false)
+        }
+        return
+      }
+      if (event.target.id === 'invoke-form') {
+        event.preventDefault()
+        if (state.submitting) return
+        const runId = state.run?.id
+        if (!runId) { toast('请先选择一个运行'); return }
+        const text = $('#invoke-input').value.trim()
+        let input
+        if (text) {
+          try { input = JSON.parse(text) } catch (error) { toast(`入口输入不是合法 JSON：${error.message}`); return }
+        }
+        setBusy(true)
+        try {
+          const result = await api(`/api/runs/${runId}?action=invoke`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(input === undefined ? {} : { input }),
+          })
+          state.invokeDraft = ''
+          state.openPaths.clear()
+          state.selectedRunId = result.id
+          toast(`已直接运行：${result.id}`)
+          await refresh()
+        } catch (error) {
+          toast(error.message)
+        } finally {
+          setBusy(false)
+        }
+        return
+      }
+      if (event.target.id !== 'human-form') return
+      event.preventDefault()
+      if (state.submitting) return
+      let input
+      try { input = JSON.parse(state.draft) } catch (error) { toast(`恢复输入不是合法 JSON：${error.message}`); return }
+      const runId = state.run?.id
+      if (!runId) { toast('请先选择一个运行'); return }
+      setBusy(true)
+      try {
+        await api(`/api/runs/${runId}?action=resume`, {
+          method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ input }),
+        })
+        state.draft = '{}'
+        state.openPaths.clear()
+        await refresh()
+      } catch (error) {
+        toast(error.message)
+      } finally {
+        setBusy(false)
+      }
+    })
+    $('#toggle-trace').textContent = state.collapsed ? '展开' : '收起'
+    $('#def-close').addEventListener('click', closeNodeDefinition)
+    $('#def-copy').addEventListener('click', async () => {
+      if (!state.selectedNode) return
+      try {
+        await navigator.clipboard.writeText(JSON.stringify(state.selectedNode, null, 2))
+        toast('节点定义已复制')
+      } catch (error) {
+        toast(`复制失败：${error.message}`)
+      }
+    })
+    $('#def-modal').addEventListener('click', event => {
+      if (event.target.id === 'def-modal') closeNodeDefinition()
+    })
+    document.addEventListener('keydown', event => {
+      if (event.key === 'Escape' && !$('#def-modal').hidden) { closeNodeDefinition(); return }
+      if (!event.altKey || event.target?.closest?.('input, textarea, [contenteditable="true"]')) return
+      if (event.key === 'ArrowLeft') {
+        if (state.run?.parent_run_id) {
+          event.preventDefault()
+          selectRunView(state.run.parent_run_id)
+        } else if (state.session?.parent_session_id) {
+          event.preventDefault()
+          selectSession(state.session.parent_session_id)
+        }
+        return
+      }
+      if (event.key === 'ArrowRight') {
+        const child = firstSubflowRun(state.run)
+        if (child) {
+          event.preventDefault()
+          toast(`进入子流程 ${child}`)
+          selectRunView(child)
+        } else if (state.children?.length) {
+          event.preventDefault()
+          selectSession(state.children[0].id)
+        }
+      }
+    })
+    applyLayout()
+    renderOverview()
+    renderSession()
+    renderTrace()
+    refresh()
+    setInterval(() => {
+      if (document.hidden || state.submitting) return
+      const active = document.activeElement
+      if (active && ['human-input', 'answer-input', 'revise-input', 'dag-revise-input', 'invoke-input', 'workspace-input'].includes(active.id)) return
+      refresh()
+    }, 3000)
+  </script>
+</body>
+</html>
