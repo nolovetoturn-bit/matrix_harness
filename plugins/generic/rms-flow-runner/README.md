@@ -275,17 +275,17 @@ dsh 中的骨架和节点构建使用真实 agent 会话；节点实现使用可
 dsh 常驻已切换到 `rms-flow-runner-v2`（矩阵版本）：web profile 的用户层 `$DSH_HOME/profiles/web/cordis.patch.yml` 只登记 v2 的 `dsh/host.mjs`，`dsh web` 启动即挂载 `/flow-runner-v2/`，无需再传 `--patch`。旧版 `rms-flow-runner` 的 dsh 适配器不再登记（`/flow-runner/` 常驻停用），其 `flow_*` 工具仅在 MCP 平面保留。项目覆盖层 [`dsh/cordis.yml`](../../../dsh/cordis.yml) 只登记其余 rms 插件，同一插件不得两处重复登记。MCP 侧由 `mcp/server.mjs` 自动扫描。规约见 [`docs/dsh-plugin-spec.md`](../../../docs/dsh-plugin-spec.md)。
 
 ```powershell
-# 行为与面板 API 测试
-node --test "C:/Users/admin/Documents/trae_projects/rms_dsh/plugins/generic/rms-flow-runner/test/runner.test.mjs"
+# 行为与面板 API 测试（仓库根目录）
+node --test plugins/generic/rms-flow-runner/test/runner.test.mjs
 
-# dsh 配置冒烟：不传 --patch 也能看到 rms-flow-runner-v2 行（来自 profile 用户层）
+# dsh 配置冒烟（cwd 必须是 deepseek-harness/）：不传 --patch 也能看到 rms-flow-runner-v2 行（来自 profile 用户层）
 pnpm dsh --profile web --dump-config
 # 启动后验证 v2 常驻面板（旧版 /flow-runner/ 已停用）
 #   http://127.0.0.1:3080/flow-runner-v2/api/health
-"" | pnpm dsh acp --patch "C:/Users/admin/Documents/trae_projects/rms_dsh/dsh/cordis.yml"
+"" | pnpm dsh acp --patch "../dsh/cordis.yml"
 
-# MCP 平面
-node "C:/Users/admin/Documents/trae_projects/rms_dsh/mcp/server.mjs"
+# MCP 平面（仓库根目录）
+node mcp/server.mjs
 ```
 
 MCP 握手与 `tools/list` 探针见 `docs/rms-dsh-mcp.md` §3.3。修改插件后需重载 Trae 窗口/MCP 客户端，当前会话才会出现新工具。

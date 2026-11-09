@@ -24,10 +24,10 @@ dsh 侧不做目录内登记，统一由项目覆盖层 [`dsh/cordis.yml`](../..
 
 ```powershell
 # 只打印组合后的 profile 树并退出
-pnpm dsh --profile web --patch "C:/Users/admin/Documents/trae_projects/rms_dsh/dsh/cordis.yml" --dump-config
+pnpm dsh --profile web --patch "../dsh/cordis.yml" --dump-config
 
 # 冒烟：ACP profile 无需 Web 产物，stdin 关闭即退出
-"" | pnpm dsh acp --patch "C:/Users/admin/Documents/trae_projects/rms_dsh/dsh/cordis.yml"
+"" | pnpm dsh acp --patch "../dsh/cordis.yml"
 ```
 
 启动日志应出现：
@@ -40,7 +40,7 @@ pnpm dsh --profile web --patch "C:/Users/admin/Documents/trae_projects/rms_dsh/d
 MCP 侧由聚合 server 自动扫描，无需登记：
 
 ```powershell
-node "C:/Users/admin/Documents/trae_projects/rms_dsh/mcp/server.mjs"
+node mcp/server.mjs   # 在仓库根目录执行
 ```
 
 ## 备注

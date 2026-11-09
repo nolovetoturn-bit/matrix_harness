@@ -54,11 +54,11 @@ dsh 侧由项目覆盖层 [`dsh/cordis.yml`](../../../dsh/cordis.yml) 登记；M
 
 ```powershell
 # dsh 冒烟（cwd 必须是 deepseek-harness/）
-"" | pnpm dsh acp --patch "C:/Users/admin/Documents/trae_projects/rms_dsh/dsh/cordis.yml"
+"" | pnpm dsh acp --patch "../dsh/cordis.yml"
 #   期望日志： [rms-image-diff] plugin loaded (1 tools)
 
-# MCP 平面
-node "C:/Users/admin/Documents/trae_projects/rms_dsh/mcp/server.mjs"
+# MCP 平面（在仓库根目录执行）
+node mcp/server.mjs
 #   期望： tools/list 含 rms-image-diff__diff_images；
 #          tools/call 返回 text + image(image/png) 两个内容块
 ```

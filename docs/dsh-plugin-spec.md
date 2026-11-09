@@ -132,19 +132,19 @@ export function apply(ctx) {
 项目级覆盖层 `dsh/cordis.yml` 登记 dsh 适配器（`rms-flow-runner-v2` 例外：登记在 web profile 的 `cordis.patch.yml`，启动 dsh 即自动加载并常驻 `/flow-runner-v2/`；旧版 `rms-flow-runner` 已停止 dsh 常驻；同一插件不得在两处重复登记）：
 
 ```yaml
-# 叠加在已启动的 dsh profile 之上；name 必须是绝对 file:/// 路径
+# 叠加在已启动的 dsh profile 之上；name 必须是绝对 file:/// 路径（把 <仓库根目录> 换成本机路径）
 - insert:
     - id: rms-dsh-starter
-      name: 'file:///C:/Users/admin/Documents/trae_projects/rms_dsh/plugins/generic/rms-dsh-starter/dsh/host.mjs'
+      name: 'file:///<仓库根目录>/plugins/generic/rms-dsh-starter/dsh/host.mjs'
 ```
 
 启动与验证（cwd 必须是 `deepseek-harness`）：
 
 ```powershell
 # 查看合成后的 profile，确认行被插入
-pnpm dsh --profile web --patch "C:/Users/admin/Documents/trae_projects/rms_dsh/dsh/cordis.yml" --dump-config
+pnpm dsh --profile web --patch "../dsh/cordis.yml" --dump-config
 # ACP 冒烟
-"" | pnpm dsh acp --patch "C:/Users/admin/Documents/trae_projects/rms_dsh/dsh/cordis.yml"
+"" | pnpm dsh acp --patch "../dsh/cordis.yml"
 ```
 
 > harness 自带的 `cordis-plugin-development` skill 走的是 `plugin_manager install_bundle`（bundle + profile 目录写入）路径；本项目一律走 `--patch` + 项目内覆盖层，skill 仅作 API 参考。
@@ -161,7 +161,7 @@ pnpm dsh --profile web --patch "C:/Users/admin/Documents/trae_projects/rms_dsh/d
 - 依赖（仅 `mcp/` 目录）：`@modelcontextprotocol/server@2.2.0`。stdio 无需 `@modelcontextprotocol/node`。
 
 ```powershell
-node "C:/Users/admin/Documents/trae_projects/rms_dsh/mcp/server.mjs"   # 由 MCP 客户端通过 stdio 拉起
+node mcp/server.mjs   # 在仓库根目录执行；由 MCP 客户端通过 stdio 拉起
 ```
 
 接入方式（任选其一）：

@@ -31,7 +31,7 @@
 插件根：
 
 ```
-c:/Users/admin/Documents/trae_projects/rms_dsh/plugins/generic/rms-flow-runner-v2
+plugins/generic/rms-flow-runner-v2
 ```
 
 已有能力：
@@ -588,7 +588,7 @@ node --test test/engine.test.mjs test/matrix.test.mjs
 - dsh 启动命令（cwd `deepseek-harness`）：
 
 ```powershell
-pnpm dsh --profile web --patch C:/Users/admin/Documents/trae_projects/rms_dsh/dsh/cordis.yml --host 192.168.34.5 --trusted-host 192.168.34.5:3080 --no-open
+pnpm dsh --profile web --patch ../dsh/cordis.yml --host 192.168.34.5 --trusted-host 192.168.34.5:3080 --no-open
 ```
 
 - 改码后需要重启 dsh；token 会变化，从命令输出日志读取。

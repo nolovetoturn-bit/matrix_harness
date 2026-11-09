@@ -80,8 +80,8 @@ pnpm run build
 
 ```sh
 # cwd 必须是 deepseek-harness/
-pnpm dsh --profile web --patch "C:/Users/admin/Documents/trae_projects/rms_dsh/dsh/cordis.yml" --dump-config
-"" | pnpm dsh acp --patch "C:/Users/admin/Documents/trae_projects/rms_dsh/dsh/cordis.yml"
+pnpm dsh --profile web --patch "../dsh/cordis.yml" --dump-config
+"" | pnpm dsh acp --patch "../dsh/cordis.yml"
 ```
 
 ### 启动 MCP 服务

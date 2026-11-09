@@ -27,9 +27,9 @@
 
 | 参数 | 默认 | 说明 |
 |---|---|---|
-| `project_root` | `C:/Users/admin/IdeaProjects/rms-front` | 仓库根目录 |
+| `project_root` | 本机 rms-front 仓库路径 | 仓库根目录（默认值见 `plugin.mjs` 的 `DEFAULT_PROJECT_ROOT`） |
 | `frontend_dir` | `frontend-ui` | 前端目录（相对 `project_root`） |
-| `java_home` | `C:/Users/admin/.jdks/ms-11.0.29` | 后端所用 JDK11 根目录（pom 指定 `java.version=11`） |
+| `java_home` | 本机 JDK11 根目录 | 后端所用 JDK11（pom 指定 `java.version=11`，默认值见 `DEFAULT_JAVA_HOME`） |
 | `skip_frontend` | `false` | 只起后端（生产式验证，需先 `npm run build`） |
 | `skip_backend` | `false` | 只起前端 dev server |
 | `force` | `false` | 已有存活实例时先结束再拉起 |
@@ -56,8 +56,8 @@ dsh 侧由项目覆盖层 [`dsh/cordis.yml`](../../../dsh/cordis.yml) 登记；M
 
 ```powershell
 # dsh 冒烟（cwd 必须是 deepseek-harness/）
-"" | pnpm dsh acp --patch "C:/Users/admin/Documents/trae_projects/rms_dsh/dsh/cordis.yml"
+"" | pnpm dsh acp --patch "../dsh/cordis.yml"
 
-# MCP 平面：stdio 握手后调 rms-front-service__rms_front_status
-node "C:/Users/admin/Documents/trae_projects/rms_dsh/mcp/server.mjs"
+# MCP 平面：stdio 握手后调 rms-front-service__rms_front_status（在仓库根目录执行）
+node mcp/server.mjs
 ```

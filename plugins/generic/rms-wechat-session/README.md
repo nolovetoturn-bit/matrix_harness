@@ -83,8 +83,8 @@
 它**不装在全局 Python**，而是装在仓库外的专用 venv 里（便于整体删除、不影响其它环境）：
 
 ```powershell
-C:\Python314\python.exe -m venv C:\Users\admin\.wechat-session-venv
-C:\Users\admin\.wechat-session-venv\Scripts\python.exe -m pip install wechatauto-replica
+python -m venv "$env:USERPROFILE\.wechat-session-venv"
+"$env:USERPROFILE\.wechat-session-venv\Scripts\python.exe" -m pip install wechatauto-replica
 ```
 
 默认解释器路径写死在 `plugin.mjs` 的 `DEFAULT_PYTHON`；可用每个工具的 `python_exe` 参数覆盖。
@@ -334,15 +334,15 @@ Trae 重载后插件会看到锁已存在而跳过启动，守护进程继续工
 dsh 侧由项目覆盖层 [`dsh/cordis.yml`](../../../dsh/cordis.yml) 登记；MCP 侧由 `mcp/server.mjs` 自动扫描。
 
 ```powershell
-# 边车自检（不依赖 Trae）
-'{"cmd":"doctor"}' | & "C:\Users\admin\.wechat-session-venv\Scripts\python.exe" `
-  "C:/Users/admin/Documents/trae_projects/rms_dsh/plugins/generic/rms-wechat-session/scripts/wechat_sidecar.py"
+# 边车自检（在仓库根目录执行，不依赖 Trae）
+'{"cmd":"doctor"}' | & "$env:USERPROFILE\.wechat-session-venv\Scripts\python.exe" `
+  "plugins/generic/rms-wechat-session/scripts/wechat_sidecar.py"
 
 # dsh 冒烟（cwd 必须是 deepseek-harness/）
-"" | pnpm dsh acp --patch "C:/Users/admin/Documents/trae_projects/rms_dsh/dsh/cordis.yml"
+"" | pnpm dsh acp --patch "../dsh/cordis.yml"
 
-# MCP 平面
-node "C:/Users/admin/Documents/trae_projects/rms_dsh/mcp/server.mjs"
+# MCP 平面（仓库根目录）
+node mcp/server.mjs
 ```
 
 ## 已知限制

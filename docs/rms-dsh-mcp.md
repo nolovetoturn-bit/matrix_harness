@@ -10,7 +10,8 @@
 本项目所有 dsh 插件的能力都集中在一个 stdio MCP server 里：
 
 ```powershell
-node C:/Users/admin/Documents/trae_projects/rms_dsh/mcp/server.mjs
+# 在仓库根目录执行
+node mcp/server.mjs
 ```
 
 任何 Trae 会话（或任何 MCP 客户端）挂上它，即可拿到 `<插件id>__<工具名>` 形式的具名工具——**不需要知道插件怎么实现，也不需要启动 dsh**。
@@ -40,19 +41,20 @@ plugins/generic/<id>/plugin.mjs   ← 唯一权威清单（零依赖，两个平
 
 ### 3.1 Trae 全局（推荐，已写入）
 
-文件：`C:\Users\admin\AppData\Roaming\Trae CN\User\mcp.json`
+文件：`%APPDATA%\Trae CN\User\mcp.json`
 
 ```json
 "rms-dsh": {
   "command": "node",
-  "args": ["C:/Users/admin/Documents/trae_projects/rms_dsh/mcp/server.mjs"],
+  "args": ["<仓库根目录>/mcp/server.mjs"],
   "env": {}
 }
 ```
 
+- `<仓库根目录>` 需替换为本机仓库的绝对路径（MCP 客户端不会以仓库目录为 cwd）。
 - 对本机**所有** Trae 会话生效（本项目会话、其它项目会话都能看到 `rms-dsh__*` 工具）。
 - 改完后需在 Trae 里**重载 MCP 服务**（或重启 Trae）才会出现新工具。
-- 原文件备份：`C:\Users\admin\.dsh\_legacy\mcp.json.original`。
+- 原文件备份：`~/.dsh/_legacy/mcp.json.original`。
 
 ### 3.2 其它 MCP 客户端 / 项目级配置
 
@@ -60,12 +62,12 @@ plugins/generic/<id>/plugin.mjs   ← 唯一权威清单（零依赖，两个平
 
 ### 3.3 自检（不依赖 Trae）
 
-PowerShell 下用 Node 直接与 server 握手（initialize + tools/list）：
+在仓库根目录用 Node 直接与 server 握手（initialize + tools/list）：
 
 ```powershell
 @'
 const { spawn } = require("node:child_process");
-const p = spawn(process.execPath, ["C:/Users/admin/Documents/trae_projects/rms_dsh/mcp/server.mjs"], { stdio: ["pipe","pipe","pipe"] });
+const p = spawn(process.execPath, ["mcp/server.mjs"], { stdio: ["pipe","pipe","pipe"] });
 let buf = "";
 p.stdout.on("data", d => { buf += d;
   if (buf.includes('"id":2')) {
@@ -193,10 +195,10 @@ Trae 侧 MCP 工具是**延迟加载**的：工具名进上下文，但能否被
 
 ## 7. 旧产物边界（隔离区）
 
-旧体系（`C:/Users/admin/IdeaProjects/dsh_trae_bridge` 时代的 command-hub / capability-mining / dsh-session-panel / dsh-im）已**整体物理隔离**到：
+旧体系（`~/IdeaProjects/dsh_trae_bridge` 时代的 command-hub / capability-mining / dsh-session-panel / dsh-im）已**整体物理隔离**到：
 
 ```
-C:\Users\admin\.dsh\_legacy\
+~/.dsh/_legacy/
 ├── README.txt                     隔离清单（英文）
 ├── cordis.patch.yml.original      旧 home patch 原件（4 段 insert）
 ├── mcp.json.original              Trae mcp.json 原件（备份）
@@ -211,15 +213,15 @@ C:\Users\admin\.dsh\_legacy\
 
 隔离后的状态：
 
-- `C:\Users\admin\.dsh\cordis.patch.yml` 已重写为 `[]` —— 本机所有 dsh profile 不再加载旧体系任何插件；
-- `C:\Users\admin\.dsh\skills\` 只保留 `dsh-plugin-dev`（新体系的规约 skill）；
+- `~/.dsh/cordis.patch.yml` 已重写为 `[]` —— 本机所有 dsh profile 不再加载旧体系任何插件；
+- `~/.dsh/skills/` 只保留 `dsh-plugin-dev`（新体系的规约 skill）；
 - 旧项目的 Trae 记忆目录、dsh 会话日志已移出活动目录，不再被检索；
 - `_legacy` 不在任何 profile / MCP 配置的加载路径上，对本机 dsh 与 MCP **均不生效**。
 
 **恢复方式**：把 `_legacy\` 下条目移回原路径即可，例如
-`_legacy\cordis.patch.yml.original` → 覆盖回 `C:\Users\admin\.dsh\cordis.patch.yml`。
+`_legacy\cordis.patch.yml.original` → 覆盖回 `~/.dsh/cordis.patch.yml`。
 
-**未搬动**：旧源码仓库 `C:\Users\admin\IdeaProjects\dsh_trae_bridge` 原地保留 —— 它只与旧体系相关，不参与本体系加载；如需一并搬走请明确指示。
+**未搬动**：旧源码仓库 `~/IdeaProjects/dsh_trae_bridge` 原地保留 —— 它只与旧体系相关，不参与本体系加载；如需一并搬走请明确指示。
 
 ---
 
@@ -227,12 +229,12 @@ C:\Users\admin\.dsh\_legacy\
 
 ```powershell
 # ① Trae 全局配置：合法 JSON 且条目在位
-(Get-Content "C:\Users\admin\AppData\Roaming\Trae CN\User\mcp.json" -Raw | ConvertFrom-Json).mcpServers.PSObject.Properties.Name
+(Get-Content "%APPDATA%\Trae CN\User\mcp.json" -Raw | ConvertFrom-Json).mcpServers.PSObject.Properties.Name
 
 # ② MCP 平面：stdio 握手 + tools/list（见 §3.3 探针）
 
 # ③ dsh 平面（cwd 必须是 deepseek-harness\）：日志应出现 [<id>] plugin loaded
-"" | pnpm dsh acp --patch "C:/Users/admin/Documents/trae_projects/rms_dsh/dsh/cordis.yml"
+"" | pnpm dsh acp --patch "../dsh/cordis.yml"
 
 # ④ 插件契约全量校验（走 MCP 或 dsh 均可）
 rms-dsh-devkit__validate_plugin  {}   # 省略 id 即校验全部插件
